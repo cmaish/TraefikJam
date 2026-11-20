@@ -30,6 +30,20 @@ to four bumps, and 1 star otherwise. The 💡 button shows a vehicle that can le
   - 🐥 **Farm Friends:** animals sit in the way until you tap them.
   - ❄️ **Snowy Hills**
   - 🌙 **Night City**
+- **Closed exits (from about level 47):** parts of the lot's edge are blocked by hedges,
+  fences, roadworks cones, no-entry signs, parking booths with boom gates or snowbanks.
+  Red-and-white hatching marks each closed exit, and a car facing one can't leave that way.
+- **Moving obstacles:**
+  - From Farm Friends on, people stroll the footpath.
+  - From Snowy Hills on, traffic drives the roads.
+
+  Pull out while someone is passing and the car stops with a honk or a "hey!" (that counts
+  as a bump), so time your taps. Leaving cars merge into the near lane, and traffic brakes
+  for them.
+- **Realistic style:** a Toy / Realistic switch in the Garage swaps in real-looking vehicle
+  models (Kenney's Car Kit, CC0, bundled for offline play). Plain cars rotate through
+  sedan, sports, hatchback, SUV and van bodies. The school bus, ice cream truck and cement
+  mixer have no realistic version, so they stay toy-style.
 - **Every level can be solved.** The generator builds each lot so it can be cleared, and
   tunes how long the "this one first" chains get.
 - **Game feel:**
@@ -93,6 +107,8 @@ js/studio.js          turntable renderer for garage thumbnails and unlock reveal
 js/draw.js            2D overlay helpers (hint hand, particle shapes)
 vendor/               three.js r160 (MIT) + RoundedBoxGeometry, RoomEnvironment, BufferGeometryUtils
 fonts/                Rubik (OFL)
+models/carkit/        Kenney Car Kit glTF models (CC0, see License.txt) for the Realistic style
+js/realistic.js       loads/fits the realistic models; falls back to toy models
 js/audio.js           Web Audio synthesized sound effects, music and spoken cheers
 js/generator.js       level generator + solver (shared by browser and build script)
 js/worlds.js          world themes and difficulty curve
@@ -111,3 +127,8 @@ tools/                level builder, icon renderer, headless smoke + offline tes
 
 When you change any shipped file, bump `VERSION` in `sw.js` so installed copies update. The
 next time the app launches, it picks up the new version.
+
+## Credits
+
+- Realistic vehicles: [Car Kit](https://kenney.nl/assets/car-kit) by Kenney (CC0).
+- 3D engine: [three.js](https://threejs.org) (MIT). Font: Rubik (SIL OFL).

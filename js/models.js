@@ -760,3 +760,103 @@ export function buildDeco(type, rand) {
   g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   return g;
 }
+
+// ------------------------------------------------------------ edge barriers ---
+
+/**
+ * One cell-wide piece of an edge barrier, lying along X with its "front" (+Z) facing the lot.
+ * types: hedge, fence, cones, sign, booth, snowbank
+ */
+export function buildBarrier(type, rand = Math.random) {
+  const g = new THREE.Group();
+  switch (type) {
+    case 'hedge': {
+      mesh(rbox(0.94, 0.26, 0.3, 0.1), M.flat(0x3f9a4a), 0, 0.15, 0, g);
+      for (let k = -2; k <= 2; k++) mesh(ico(0.13 + rand() * 0.04, 1), M.flat(k % 2 ? 0x4fb45a : 0x46a852), k * 0.19, 0.3, (rand() - 0.5) * 0.08, g);
+      for (let k = 0; k < 3; k++) mesh(sph(0.03, 6), M.matte([0xff6b9a, 0xffd23f, 0xffffff][k]), (rand() - 0.5) * 0.8, 0.37, 0.12, g);
+      break;
+    }
+    case 'fence': {
+      for (const x of [-0.42, 0, 0.42]) mesh(rbox(0.06, 0.36, 0.06, 0.015), M.matte(0xfff8ee), x, 0.18, 0, g);
+      for (const y of [0.14, 0.28]) mesh(rbox(0.96, 0.05, 0.035, 0.012), M.matte(0xfff8ee), 0, y, 0, g);
+      break;
+    }
+    case 'cones': {
+      for (const x of [-0.34, 0.34]) {
+        mesh(rbox(0.22, 0.03, 0.22, 0.01), M.matte(0xff6a1a), x, 0.015, 0, g);
+        mesh(cone(0.09, 0.3, 14), M.matte(0xff6a1a), x, 0.18, 0, g);
+        mesh(cyl(0.06, 0.072, 0.05, 14), M.matte(0xffffff), x, 0.16, 0, g);
+      }
+      // striped roadworks plank between the cones
+      for (let k = 0; k < 6; k++) mesh(new THREE.BoxGeometry(0.12, 0.08, 0.03), M.matte(k % 2 ? 0xffffff : 0xff4d1f), -0.3 + k * 0.12, 0.26, 0.02, g);
+      mesh(sph(0.025, 8), M.glow(0xffb020, 2), 0.34, 0.35, 0, g);
+      break;
+    }
+    case 'sign': {
+      mesh(cyl(0.02, 0.02, 0.5, 8), M.chrome(), 0, 0.25, 0, g);
+      mesh(cyl(0.08, 0.1, 0.03, 12), M.dark(), 0, 0.015, 0, g);
+      const plate = mesh(cyl(0.16, 0.16, 0.025, 24), M.matte(0xe6202f), 0, 0.5, 0.02, g);
+      plate.rotation.x = Math.PI / 2;
+      mesh(new THREE.BoxGeometry(0.2, 0.05, 0.01), M.matte(0xffffff), 0, 0.5, 0.036, g);
+      // a short low rail so the whole cell reads as closed
+      mesh(rbox(0.9, 0.05, 0.05, 0.02), M.matte(0xd9dde4), 0, 0.12, -0.05, g);
+      for (const x of [-0.42, 0.42]) mesh(rbox(0.05, 0.16, 0.05, 0.015), M.matte(0xd9dde4), x, 0.08, -0.05, g);
+      break;
+    }
+    case 'booth': {
+      const bx = 0.33;
+      mesh(rbox(0.3, 0.42, 0.28, 0.04), M.matte(0xf1f3f7), bx, 0.21, -0.02, g);
+      mesh(rbox(0.32, 0.04, 0.3, 0.02), M.paint(0x3478ff), bx, 0.44, -0.02, g);
+      mesh(rbox(0.22, 0.14, 0.02, 0.01), M.glass(), bx, 0.28, 0.125, g);
+      mesh(rbox(0.06, 0.1, 0.06, 0.02), M.matte(0xffd23f), bx - 0.17, 0.2, 0.06, g);
+      // boom gate across the exit, red and white
+      for (let k = 0; k < 7; k++) mesh(new THREE.BoxGeometry(0.115, 0.045, 0.045), M.matte(k % 2 ? 0xffffff : 0xe6202f), bx - 0.2 - k * 0.11, 0.24, 0.06, g);
+      break;
+    }
+    case 'snowbank': {
+      for (const [x, r] of [[-0.3, 0.2], [0.02, 0.24], [0.32, 0.19]]) { const o = mesh(sph(r, 12), M.matte(0xfbfdff), x, 0.05, 0, g); o.scale.y = 0.75; }
+      break;
+    }
+  }
+  return mergeStatic(g);
+}
+
+// ------------------------------------------------------------ people ---
+
+const SKIN = [0xf1c7a5, 0xd9a07a, 0xa86b45, 0x7a4a2c, 0xffdcc0];
+const SHIRT = [0xff5a5f, 0x3478ff, 0x22b866, 0xffad1f, 0x9b5de5, 0x2ec4b6, 0xf15bb5];
+const HAIR = [0x2b1d14, 0x5b3b22, 0xd8b26a, 0x111111, 0x9a3b1f];
+
+/** A little walking person, facing -Z. userData: { body, legs, arms } for the walk cycle. */
+export function buildPerson(rand = Math.random) {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+  const shirt = pick(SHIRT), skin = pick(SKIN), hair = pick(HAIR);
+  const legs = [], arms = [];
+  for (const sx of [-1, 1]) {
+    const hip = new THREE.Group();
+    hip.position.set(sx * 0.05, 0.2, 0);
+    mesh(rbox(0.07, 0.2, 0.08, 0.03), M.matte(0x2d3550), 0, -0.1, 0, hip);
+    mesh(rbox(0.08, 0.04, 0.11, 0.02), M.matte(0x1b1f2a), 0, -0.19, -0.015, hip);
+    body.add(hip);
+    legs.push(hip);
+    const sh = new THREE.Group();
+    sh.position.set(sx * 0.13, 0.38, 0);
+    mesh(rbox(0.05, 0.17, 0.06, 0.025), M.matte(shirt), 0, -0.08, 0, sh);
+    mesh(sph(0.03, 8), M.matte(skin), 0, -0.17, 0, sh);
+    body.add(sh);
+    arms.push(sh);
+  }
+  const torso = new THREE.Group();
+  mesh(rbox(0.2, 0.22, 0.12, 0.05), M.matte(shirt), 0, 0.3, 0, torso);
+  mesh(sph(0.085, 14), M.matte(skin), 0, 0.5, 0, torso);
+  const cap = mesh(sph(0.09, 14), M.matte(hair), 0, 0.53, 0.01, torso);
+  cap.scale.set(1, 0.7, 1);
+  for (const sx of [-1, 1]) mesh(sph(0.012, 6), M.matte(0x111111), sx * 0.03, 0.51, -0.08, torso);
+  body.add(mergeStatic(torso));
+  g.userData = { body, legs, arms };
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
+  return g;
+}

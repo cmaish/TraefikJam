@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   speed: 1, // 0.7 slow, 1 normal, 1.4 fast
   stars: 'bumps', // 'bumps' = fewer stars for bumping, 'gentle' = always 3 stars
   faces: false, // cartoon eyes on vehicles
+  realistic: false, // use the realistic (Kenney Car Kit) models instead of toy-style ones
   kidMode: false,
   parentLock: false, // require a grown-up check before opening settings
   timeLimit: 0, // minutes per session, 0 = off

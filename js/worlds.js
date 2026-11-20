@@ -7,32 +7,32 @@ export const WORLDS = [
   {
     id: 'sunny', name: 'Sunny Town', icon: '☀️',
     obstacle: 'bush', pets: [],
-    grid: [[3, 4], [5, 7]], fill: [0.5, 0.8], truck: [0, 0.15], obstacles: [0, 0], petCount: [0, 0], hard: [0, 0.5],
+    grid: [[3, 4], [5, 7]], fill: [0.5, 0.8], truck: [0, 0.15], obstacles: [0, 0], petCount: [0, 0], hard: [0, 0.5], barriers: [0, 0], walkers: [0, 0], cars: [0, 0],
   },
   {
     id: 'trucks', name: 'Truck Stop', icon: '🚚',
     obstacle: 'cone', pets: [],
-    grid: [[5, 6], [6, 8]], fill: [0.65, 0.82], truck: [0.3, 0.4], obstacles: [0, 2], petCount: [0, 0], hard: [0.4, 0.7],
+    grid: [[5, 6], [6, 8]], fill: [0.65, 0.82], truck: [0.3, 0.4], obstacles: [0, 2], petCount: [0, 0], hard: [0.4, 0.7], barriers: [0, 0], walkers: [0, 0], cars: [0, 0],
   },
   {
     id: 'forest', name: 'Forest Park', icon: '🌲',
     obstacle: 'tree', pets: ['bunny'],
-    grid: [[6, 7], [7, 9]], fill: [0.7, 0.84], truck: [0.3, 0.35], obstacles: [2, 4], petCount: [0, 1], hard: [0.55, 0.8],
+    grid: [[6, 7], [7, 9]], fill: [0.7, 0.84], truck: [0.3, 0.35], obstacles: [2, 4], petCount: [0, 1], hard: [0.55, 0.8], barriers: [-1, 4], walkers: [0, 0], cars: [0, 0],
   },
   {
     id: 'farm', name: 'Farm Friends', icon: '🐥',
     obstacle: 'hay', pets: ['duck', 'pig', 'chick', 'puppy'],
-    grid: [[6, 8], [7, 9]], fill: [0.72, 0.85], truck: [0.3, 0.35], obstacles: [1, 3], petCount: [1, 3], hard: [0.65, 0.88],
+    grid: [[6, 8], [7, 9]], fill: [0.72, 0.85], truck: [0.3, 0.35], obstacles: [1, 3], petCount: [1, 3], hard: [0.65, 0.88], barriers: [1, 5], walkers: [-0.6, 2], cars: [0, 0],
   },
   {
     id: 'snow', name: 'Snowy Hills', icon: '❄️',
     obstacle: 'snowman', pets: ['penguin', 'bunny'],
-    grid: [[7, 8], [8, 10]], fill: [0.74, 0.86], truck: [0.3, 0.4], obstacles: [2, 4], petCount: [0, 2], hard: [0.75, 0.95],
+    grid: [[7, 8], [8, 10]], fill: [0.74, 0.86], truck: [0.3, 0.4], obstacles: [2, 4], petCount: [0, 2], hard: [0.75, 0.95], barriers: [2, 6], walkers: [0.6, 2], cars: [-0.8, 2],
   },
   {
     id: 'night', name: 'Night City', icon: '🌙',
     obstacle: 'cone', pets: ['kitty', 'puppy'],
-    grid: [[7, 9], [8, 10]], fill: [0.76, 0.87], truck: [0.35, 0.4], obstacles: [2, 4], petCount: [1, 2], hard: [0.85, 1],
+    grid: [[7, 9], [8, 10]], fill: [0.76, 0.87], truck: [0.35, 0.4], obstacles: [2, 4], petCount: [1, 2], hard: [0.85, 1], barriers: [3, 7], walkers: [1, 2], cars: [0.6, 3],
   },
 ];
 
@@ -65,10 +65,13 @@ export function levelParams(n) {
   const pets = Math.round(lerp(W.petCount[0], W.petCount[1], tt));
   const fill = lerp(W.fill[0], W.fill[1], tt);
   const hard = endless ? Math.min(1, 0.75 + 0.25 * t) : lerp(W.hard[0], W.hard[1], tt);
+  const barriers = endless ? 3 + ((n * 5) % 4) : Math.max(0, Math.round(lerp(W.barriers[0], W.barriers[1], tt)));
+  const walkers = endless ? 1 + (n % 2) : Math.max(0, Math.round(lerp(W.walkers[0], W.walkers[1], tt)));
+  const cars = endless ? (n % 3) + 1 : Math.max(0, Math.round(lerp(W.cars[0], W.cars[1], tt)));
   const avgLen = 2 + truck;
   const count = Math.max(1, Math.round((fill * (w * h - obstacles - pets)) / avgLen));
   return {
-    world: wi, theme: W.id, w, h, count, truck, obstacles, pets,
+    world: wi, theme: W.id, w, h, count, truck, obstacles, pets, barriers, walkers, cars,
     bias: lerp(0.3, 1.2, hard),
     improve: Math.round(lerp(150, 500, hard)),
     targetDepth: Math.max(1, Math.round(lerp(0.3, 0.75, hard) * count)),

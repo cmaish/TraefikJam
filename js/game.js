@@ -1,8 +1,9 @@
 // 3D board: rendering (three.js), input, driving / bump animation, hints, win detection.
 import * as THREE from '../vendor/three.module.min.js';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
-import { DX, DY, isHoriz, vehicleCells, rayCells, rotateLevel, makeRng } from './generator.js';
-import { buildVehicle, buildObstacle, buildPet, buildDeco, mergeStatic, M, rbox } from './models.js';
+import { DX, DY, isHoriz, vehicleCells, rayCells, rotateLevel, makeRng, barrierSet, exitBarred } from './generator.js';
+import { buildObstacle, buildPet, buildDeco, buildBarrier, buildPerson, mergeStatic, rbox } from './models.js';
+import { vehicleModel } from './realistic.js';
 import { FX } from './fx.js';
 import { drawHand } from './draw.js';
 import { KINDS } from './vehicles.js';
@@ -16,7 +17,11 @@ const THEMES = {
   night: { sky: 0x10162e, ground: 0x253050, lot: '#353b56', line: 'rgba(255,215,122,0.8)', curb: 0x59628e, hemi: [0x5a6aa8, 0x101830, 0.55], sun: [0x9fb4ff, 0.7], deco: ['building', 'building', 'lamp', 'building'], night: true },
 };
 
-const ROAD_OFF = 0.85;
+const ROAD_NEAR = 0.85; // lot edge -> road centre on plain levels
+const ROAD_FAR = 1.4; // ...and on levels with a footpath (barriers, people, traffic)
+const LANE = 0.24; // lane centre offset from the road centre
+const WALK = 0.68; // footpath walking line, from the lot edge
+const BAR = 0.36; // barrier line, from the lot edge
 // Flat ground layers are painted in this order with depth writes off, so overlapping
 // planes (crossing roads, sidewalks, lane dashes, the lot) never z-fight at any distance.
 const LAYER = { ground: -10, sidewalk: -9, road: -8, dash: -7, lot: -6 };
@@ -121,6 +126,14 @@ export class Game {
     this.vehicles = level.vehicles.map((v) => ({ ...v, state: 'idle', off: 0, vel: 0, s: 0, squish: 0, wiggle: 0, hop: 0 }));
     this.pets = level.pets.map((p) => ({ ...p, state: 'idle', t: 0, phase: Math.random() * 6, intro: 1 }));
     this.obstacles = level.obstacles.map((o) => ({ ...o }));
+    this.barriers = (level.barriers || []).map((b) => ({ ...b }));
+    this.barred = barrierSet({ barriers: this.barriers });
+    this.walkerCount = level.walkers || 0;
+    this.carCount = level.cars || 0;
+    this.hasPath = this.barriers.length > 0 || this.walkerCount > 0 || this.carCount > 0;
+    this.ro = this.hasPath ? ROAD_FAR : ROAD_NEAR;
+    this.traffic = [];
+    this.walkers = [];
     this.total = this.vehicles.length;
     this.exited = 0;
     this.bumps = 0;
@@ -170,8 +183,10 @@ export class Game {
 
   _rotateLogic() {
     const L = this.level;
-    const r = rotateLevel({ ...L, vehicles: this.vehicles, pets: this.pets, obstacles: this.obstacles });
+    const r = rotateLevel({ ...L, vehicles: this.vehicles, pets: this.pets, obstacles: this.obstacles, barriers: this.barriers });
     this.level = { ...L, w: r.w, h: r.h };
+    this.barriers = r.barriers.map((b) => ({ ...b, mesh: undefined }));
+    this.barred = barrierSet({ barriers: this.barriers });
     const byId = new Map(r.vehicles.map((v) => [v.id, v]));
     for (const v of this.vehicles) {
       const nv = byId.get(v.id);
@@ -214,6 +229,7 @@ export class Game {
     this.sun.intensity = th.sun[1] * 0.8;
 
     const hw = L.w / 2, hh = L.h / 2;
+    const ro = this.ro;
     const rand = makeRng((this.levelN || 1) * 97 + 3);
 
     // ground
@@ -238,7 +254,7 @@ export class Game {
       layer(m, LAYER.road);
       this.world.add(m);
       for (let t = -40; t < 40; t += 0.8) {
-        const nearCross = horiz ? Math.abs(Math.abs(t) - (hw + ROAD_OFF)) < 0.8 : Math.abs(Math.abs(t) - (hh + ROAD_OFF)) < 0.8;
+        const nearCross = horiz ? Math.abs(Math.abs(t) - (hw + ro)) < 0.8 : Math.abs(Math.abs(t) - (hh + ro)) < 0.8;
         if (!nearCross) dashes.push(horiz ? [t, c, 0] : [c, t, 1]);
       }
       // outer sidewalk
@@ -252,10 +268,10 @@ export class Game {
         this.world.add(sw);
       }
     };
-    addRoad(true, -(hh + ROAD_OFF), 0.004);
-    addRoad(true, hh + ROAD_OFF, 0.004);
-    addRoad(false, -(hw + ROAD_OFF), 0.006);
-    addRoad(false, hw + ROAD_OFF, 0.006);
+    addRoad(true, -(hh + ro), 0.004);
+    addRoad(true, hh + ro, 0.004);
+    addRoad(false, -(hw + ro), 0.006);
+    addRoad(false, hw + ro, 0.006);
     const dg = new THREE.BoxGeometry(0.34, 0.004, 0.05);
     const im = new THREE.InstancedMesh(dg, dashMat, dashes.length);
     const mtx = new THREE.Matrix4();
@@ -286,9 +302,38 @@ export class Game {
       this.world.add(c);
     }
 
+    // paved footpath between the lot and the road (levels with barriers, people or traffic)
+    if (this.hasPath) {
+      const inner = 0.24, outer = ro - ROAD_W / 2;
+      const pw = outer - inner;
+      const pathMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(th.curb).lerp(new THREE.Color(th.ground), 0.15), roughness: 0.85, envMapIntensity: 0.3 });
+      for (const [w2, d2, x, z] of [
+        [L.w + 2 * outer, pw, 0, -hh - inner - pw / 2], [L.w + 2 * outer, pw, 0, hh + inner + pw / 2],
+        [pw, L.h + 2 * inner, -hw - inner - pw / 2, 0], [pw, L.h + 2 * inner, hw + inner + pw / 2, 0],
+      ]) {
+        const fp = new THREE.Mesh(new THREE.PlaneGeometry(w2, d2), pathMat);
+        fp.rotation.x = -Math.PI / 2;
+        fp.position.set(x, 0, z);
+        fp.receiveShadow = true;
+        layer(fp, LAYER.sidewalk);
+        this.world.add(fp);
+      }
+    }
+    // closed exits
+    const brand = makeRng((this.levelN || 1) * 71 + 5);
+    for (const b of this.barriers) {
+      const m = buildBarrier(b.type, brand);
+      const [x, z, ry] = this._barrierPos(b);
+      m.scale.set(1, 1.45, 1.3);
+      m.position.set(x, 0, z);
+      m.rotation.y = ry;
+      this.board.add(m);
+      b.mesh = m;
+    }
+
     // scenery outside the roads
-    const clearX = hw + ROAD_OFF + ROAD_W / 2 + 0.55;
-    const clearZ = hh + ROAD_OFF + ROAD_W / 2 + 0.55;
+    const clearX = hw + ro + ROAD_W / 2 + 0.55;
+    const clearZ = hh + ro + ROAD_W / 2 + 0.55;
     const R = Math.max(L.w, L.h) + 9;
     let placed = 0;
     const spots = [];
@@ -298,7 +343,7 @@ export class Game {
       const ax = Math.abs(x), az = Math.abs(z);
       if (ax < clearX && az < clearZ) continue;
       // keep off the roads
-      if (Math.abs(ax - (hw + ROAD_OFF)) < ROAD_W / 2 + 0.55 || Math.abs(az - (hh + ROAD_OFF)) < ROAD_W / 2 + 0.55) continue;
+      if (Math.abs(ax - (hw + ro)) < ROAD_W / 2 + 0.55 || Math.abs(az - (hh + ro)) < ROAD_W / 2 + 0.55) continue;
       const type = th.deco[Math.floor(rand() * th.deco.length)];
       const big = type === 'house' || type === 'building' || type === 'barn';
       const need = big ? 1.6 : 0.7;
@@ -316,7 +361,7 @@ export class Game {
     }
     if (th.night) {
       // street lamps along the roads + a few real lights
-      for (const [x, z, ry] of [[-hw - ROAD_OFF - 0.75, -hh * 0.5, Math.PI / 2], [hw + ROAD_OFF + 0.75, hh * 0.5, -Math.PI / 2], [-hw * 0.5, hh + ROAD_OFF + 0.75, Math.PI], [hw * 0.5, -hh - ROAD_OFF - 0.75, 0]]) {
+      for (const [x, z, ry] of [[-hw - ro - 0.75, -hh * 0.5, Math.PI / 2], [hw + ro + 0.75, hh * 0.5, -Math.PI / 2], [-hw * 0.5, hh + ro + 0.75, Math.PI], [hw * 0.5, -hh - ro - 0.75, 0]]) {
         const l = buildDeco('lamp', rand);
         l.position.set(x, 0, z);
         l.rotation.y = ry;
@@ -351,10 +396,11 @@ export class Game {
     }
     // vehicles
     const faces = !!this.settings.faces;
+    const realistic = !!this.settings.realistic;
     this.glowTex = this.glowTex || this._glowTexture();
     for (const v of this.vehicles) {
       if (v.state === 'gone') continue;
-      const m = buildVehicle(v, { faces });
+      const m = vehicleModel(v, { faces, realistic });
       m.userData.vid = v.id;
       if (th.night) {
         const beam = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.6), new THREE.MeshBasicMaterial({ map: this.glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 }));
@@ -375,25 +421,17 @@ export class Game {
     this.blockMesh.visible = false;
     this.board.add(this.blockMesh);
 
-    // a little traffic on the roads behind the home screen
+    // traffic on the roads and people on the footpath
     this.traffic = [];
-    if (this.mode === 'show') {
-      const pool = this.vehicles.filter((v) => v.kind).map((v) => v.kind);
-      const kinds = pool.length > 3 ? pool : ['car', 'car', 'truck', ...pool];
-      const lanes = [
-        { axis: 'x', c: -(hh + ROAD_OFF) + 0.24, dir: 1 }, { axis: 'x', c: hh + ROAD_OFF - 0.24, dir: 3 },
-        { axis: 'z', c: hw + ROAD_OFF + 0.24, dir: 0 }, { axis: 'z', c: -(hw + ROAD_OFF) - 0.24, dir: 2 },
-        { axis: 'x', c: hh + ROAD_OFF + 0.24, dir: 1 }, { axis: 'z', c: -(hw + ROAD_OFF) + 0.24, dir: 0 },
-      ];
-      lanes.forEach((ln, i) => {
-        const kind = kinds[Math.floor(rand() * kinds.length)];
-        const len = kind && ['truck', 'bus', 'firetruck', 'icecream', 'garbage', 'mixer'].includes(kind) ? 3 : 2;
-        const colors = ['#ff5a5f', '#ff9f1c', '#ffd23f', '#3ccf6e', '#2ec4b6', '#3a86ff', '#9b5de5', '#f15bb5'];
-        const m = buildVehicle({ kind, len, color: colors[Math.floor(rand() * colors.length)] }, { faces });
-        m.rotation.y = yawOf(ln.dir);
-        this.world.add(m);
-        this.traffic.push({ m, ...ln, pos: -24 + i * 9 + rand() * 4, speed: 1.6 + rand() * 1.2 });
-      });
+    this.walkers = [];
+    const tcount = this.mode === 'show' ? 6 : this.carCount;
+    if (tcount) this._spawnTraffic(tcount, rand, faces, realistic);
+    for (let i = 0; i < this.walkerCount; i++) {
+      const m = buildPerson(rand);
+      m.scale.setScalar(1.45);
+      this.world.add(m);
+      const A = hw + WALK, B = hh + WALK;
+      this.walkers.push({ m, s: (i / Math.max(1, this.walkerCount)) * (4 * A + 4 * B) + rand() * 2, dir: rand() < 0.5 ? 1 : -1, speed: 0.5 + rand() * 0.2, phase: rand() * 6, jolt: 0 });
     }
 
     // snow
@@ -415,6 +453,86 @@ export class Game {
     sc.updateProjectionMatrix();
     this.sun.position.set(-ext * 0.7, 12, ext * 0.9);
     this.sun.target.position.set(0, 0, 0);
+  }
+
+  /** World position + facing for one closed exit cell (barrier front faces the lot). */
+  _barrierPos(b) {
+    const L = this.level;
+    const hw = L.w / 2, hh = L.h / 2;
+    if (b.side === 0) return [b.i + 0.5 - hw, -hh - BAR, 0];
+    if (b.side === 2) return [b.i + 0.5 - hw, hh + BAR, Math.PI];
+    if (b.side === 1) return [hw + BAR, b.i + 0.5 - hh, -Math.PI / 2];
+    return [-hw - BAR, b.i + 0.5 - hh, Math.PI / 2];
+  }
+
+  /** Lanes: the near lane of each road runs clockwise around the lot (where leaving cars merge). */
+  _lane(side, near = true) {
+    const L = this.level;
+    const hw = L.w / 2, hh = L.h / 2, ro = this.ro;
+    const n = near ? 1 : -1;
+    if (side === 0) return { axis: 'x', c: -(hh + ro) + LANE * n, dir: near ? 1 : 3 };
+    if (side === 1) return { axis: 'z', c: hw + ro - LANE * n, dir: near ? 2 : 0 };
+    if (side === 2) return { axis: 'x', c: hh + ro - LANE * n, dir: near ? 3 : 1 };
+    return { axis: 'z', c: -(hw + ro) + LANE * n, dir: near ? 0 : 2 };
+  }
+
+  _spawnTraffic(count, rand, faces, realistic) {
+    const pool = this.vehicles.filter((v) => v.kind).map((v) => v.kind);
+    const kinds = pool.length > 3 ? pool : ['car', 'car', 'truck', ...pool];
+    const colors = ['#ff5a5f', '#ff9f1c', '#ffd23f', '#3ccf6e', '#2ec4b6', '#3a86ff', '#9b5de5', '#f15bb5'];
+    const L = this.level;
+    this.trafficSpan = Math.max(L.w, L.h) / 2 + this.ro + 14;
+    for (let i = 0; i < count; i++) {
+      const side = i % 4;
+      const near = this.mode === 'play' ? rand() < 0.8 : rand() < 0.5;
+      const ln = this._lane(side, near);
+      const kind = kinds[Math.floor(rand() * kinds.length)];
+      const len = ['truck', 'bus', 'firetruck', 'icecream', 'garbage', 'mixer'].includes(kind) ? 3 : 2;
+      const m = vehicleModel({ kind, len, color: colors[Math.floor(rand() * colors.length)], id: i + 40 }, { faces, realistic });
+      m.rotation.y = yawOf(ln.dir);
+      this.world.add(m);
+      const base = this.mode === 'play' ? 1.3 + rand() * 0.7 : 1.6 + rand() * 1.2;
+      this.traffic.push({ m, ...ln, side, near, len, pos: -this.trafficSpan * 0.6 + rand() * this.trafficSpan * 1.2, base, speed: base });
+    }
+  }
+
+  _laneSign(dir) { return dir === 1 || dir === 2 ? 1 : -1; }
+
+  _walkerAt(w) {
+    const L = this.level;
+    const A = L.w / 2 + WALK, B = L.h / 2 + WALK;
+    const P = 4 * A + 4 * B;
+    let s2 = ((w.s % P) + P) % P;
+    if (s2 < 2 * A) return [-A + s2, -B, w.dir > 0 ? 1 : 3];
+    s2 -= 2 * A;
+    if (s2 < 2 * B) return [A, -B + s2, w.dir > 0 ? 2 : 0];
+    s2 -= 2 * B;
+    if (s2 < 2 * A) return [A - s2, B, w.dir > 0 ? 3 : 1];
+    s2 -= 2 * A;
+    return [-A, B - s2, w.dir > 0 ? 0 : 2];
+  }
+
+  /** Is someone or something passing the exit this vehicle would use, right now? */
+  timingBlock(v) {
+    if (!this.walkers.length && !this.traffic.length) return null;
+    const L = this.level;
+    const hw = L.w / 2, hh = L.h / 2;
+    const ex = v.dir === 1 ? hw + WALK : v.dir === 3 ? -hw - WALK : v.x + 0.5 - hw;
+    const ez = v.dir === 0 ? -hh - WALK : v.dir === 2 ? hh + WALK : v.y + 0.5 - hh;
+    for (const w of this.walkers) {
+      const p = w.m.position;
+      if (Math.hypot(p.x - ex, p.z - ez) < 0.85) return { kind: 'walker', obj: w };
+    }
+    const lane = this._lane(v.dir, true);
+    const sign = this._laneSign(lane.dir);
+    const coord = lane.axis === 'x' ? ex : ez;
+    const pm = sign * coord + 0.4;
+    for (const tr of this.traffic) {
+      if (tr.axis !== lane.axis || Math.abs(tr.c - lane.c) > 0.01 || tr.dir !== lane.dir) continue;
+      const rel = pm - tr.pos;
+      if (rel > -1.0 - tr.len / 2 && rel < 2.6) return { kind: 'traffic', obj: tr };
+    }
+    return null;
   }
 
   _lotTexture(L, th) {
@@ -452,6 +570,20 @@ export class Game {
     for (let gy = 1; gy < L.h; gy++) { x.beginPath(); x.moveTo(o + px * 0.2, o + gy * px); x.lineTo(o + L.w * px - px * 0.2, o + gy * px); x.stroke(); }
     x.globalAlpha = 1;
     x.setLineDash([]);
+    // red/white "no exit" hatching painted along every closed exit
+    for (const b of this.barriers || []) {
+      let rx, ry, rw, rh;
+      if (b.side === 0) [rx, ry, rw, rh] = [o + b.i * px, 0, px, o];
+      else if (b.side === 2) [rx, ry, rw, rh] = [o + b.i * px, o + L.h * px, px, o];
+      else if (b.side === 1) [rx, ry, rw, rh] = [o + L.w * px, o + b.i * px, o, px];
+      else [rx, ry, rw, rh] = [0, o + b.i * px, o, px];
+      x.save();
+      x.beginPath(); x.rect(rx, ry, rw, rh); x.clip();
+      x.fillStyle = '#ffffff'; x.fillRect(rx, ry, rw, rh);
+      x.fillStyle = '#e6202f';
+      for (let k = -px; k < px * 2; k += px * 0.16) { x.beginPath(); x.moveTo(rx + k, ry); x.lineTo(rx + k + px * 0.08, ry); x.lineTo(rx + k + px * 0.08 + rh, ry + rh); x.lineTo(rx + k + rh, ry + rh); x.fill(); }
+      x.restore();
+    }
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
@@ -500,7 +632,9 @@ export class Game {
     const L = this.level;
     const cam = this.camera;
     const el = this.mode === 'show' ? 0.85 : 0.98; // elevation (rad)
-    const hw = L.w / 2 + 0.3, hh = L.h / 2 + 0.3;
+    // frame the road too when traffic matters, the footpath when people/barriers do
+    const margin = this.mode === 'play' && this.carCount ? this.ro + 0.55 : this.hasPath ? this.ro - 0.42 : 0.3;
+    const hw = L.w / 2 + margin, hh = L.h / 2 + margin;
     const pts = [];
     for (const x of [-hw, hw]) for (const z of [-hh, hh]) for (const y of [0, 0.7]) pts.push(new THREE.Vector3(x, y, z));
     const topPx = this.mode === 'show' ? this.hooks.showInsets?.().top ?? 0 : this.hooks.hudHeight?.() ?? 70;
@@ -571,10 +705,14 @@ export class Game {
     return null;
   }
 
-  isFree(v) { return rayCells(v, this.level.w, this.level.h).every(([x, y]) => !this.blockerAt(x, y, v)); }
+  isFree(v) {
+    return !exitBarred(v, this.barred) && rayCells(v, this.level.w, this.level.h).every(([x, y]) => !this.blockerAt(x, y, v));
+  }
 
   findHint() {
     const free = this.vehicles.filter((v) => v.state === 'idle' && this.isFree(v));
+    const now = free.filter((v) => !this.timingBlock(v));
+    if (now.length) return { kind: 'vehicle', obj: now[Math.floor(now.length / 2)] };
     if (free.length) return { kind: 'vehicle', obj: free[Math.floor(free.length / 2)] };
     const pet = this.pets.find((p) => p.state === 'idle');
     return pet ? { kind: 'pet', obj: pet } : null;
@@ -610,15 +748,15 @@ export class Game {
     const L = this.level;
     const [sx, sz] = this._centerOf(v);
     const hw = L.w / 2, hh = L.h / 2;
-    const d1 = v.dir === 0 ? sz + hh + ROAD_OFF : v.dir === 2 ? hh + ROAD_OFF - sz : v.dir === 1 ? hw + ROAD_OFF - sx : sx + hw + ROAD_OFF;
-    let nd;
-    if (v.dir === 0 || v.dir === 2) nd = sx > 0 || (sx === 0 && v.id % 2) ? 1 : 3;
-    else nd = sz > 0 || (sz === 0 && v.id % 2) ? 2 : 0;
-    const R = 0.55;
+    const ro = this.ro;
+    // drive to the near lane (closer than the road centre), then turn clockwise into it
+    const d1 = (v.dir === 0 ? sz + hh + ro : v.dir === 2 ? hh + ro - sz : v.dir === 1 ? hw + ro - sx : sx + hw + ro) - LANE;
+    const nd = (v.dir + 1) % 4;
+    const R = 0.5;
     let dy = yawOf(nd) - yawOf(v.dir);
     while (dy > Math.PI) dy -= Math.PI * 2;
     while (dy < -Math.PI) dy += Math.PI * 2;
-    v.path = { sx, sz, f: [DX[v.dir], DY[v.dir]], n: [DX[nd], DY[nd]], d1, R, y0: yawOf(v.dir), dy, a: Math.max(0, d1 - R), arc: (Math.PI * R) / 2 };
+    v.path = { sx, sz, f: [DX[v.dir], DY[v.dir]], n: [DX[nd], DY[nd]], d1, R, y0: yawOf(v.dir), dy, a: Math.max(0, d1 - R), arc: (Math.PI * R) / 2, lane: this._lane(v.dir, true) };
   }
 
   _pathAt(v, s) {
@@ -695,6 +833,16 @@ export class Game {
       const b = this.blockerAt(ray[i][0], ray[i][1], v);
       if (b) { dist = i; blocker = b; break; }
     }
+    if (!blocker && exitBarred(v, this.barred)) {
+      const [side, i] = v.dir === 0 || v.dir === 2 ? [v.dir, v.x] : [v.dir, v.y];
+      blocker = { kind: 'barrier', obj: this.barriers.find((b) => b.side === side && b.i === i) };
+      dist = ray.length + 0.12;
+    }
+    let timing = false;
+    if (!blocker) {
+      const tb = this.timingBlock(v);
+      if (tb) { blocker = tb; dist = 0.06; timing = true; }
+    }
     v.squish = 1;
     this.hooks.haptic?.(12);
     if (!blocker) {
@@ -711,7 +859,7 @@ export class Game {
     } else {
       v.state = 'bump';
       v.phase = 'fwd';
-      v.bumpTo = dist + (dist === 0 ? 0.12 : 0.1);
+      v.bumpTo = timing ? dist : dist + (dist === 0 ? 0.12 : 0.1);
       v.blocker = blocker;
       v.vel = 0;
       this.bumps++;
@@ -754,6 +902,7 @@ export class Game {
   _needsRender() {
     if (this.mode === 'show' || this._forceFrames > 0) { this._forceFrames--; return true; }
     if (this.hint || this.shake > 0 || this.fx.p.length || this.snow || this.introLeft > 0 || this.blockT > 0) return true;
+    if (this.traffic.length || this.walkers.length) return true;
     if (this.pets.some((p) => p.state !== 'gone')) return true;
     return this.vehicles.some((v) => v.state === 'exit' || v.state === 'bump' || v.squish > 0 || v.wiggle > 0 || v.hop > 0)
       || this.obstacles.some((o) => o.wob > 0);
@@ -799,8 +948,18 @@ export class Game {
       v.wiggle = Math.max(0, v.wiggle - dt * 2.2);
       let ds = 0;
       if (v.state === 'exit') {
-        busy = true;
+        if (v.s < v.path.d1 + 1.2) busy = true; // once it's out on the road the level can finish
         v.vel = Math.min(11, v.vel + dt * 22 * speed);
+        if (this.traffic.length && v.s > v.path.a) {
+          // don't drive through slower traffic ahead in the same lane
+          const ln = v.path.lane, sign = this._laneSign(ln.dir);
+          const mine = sign * (ln.axis === 'x' ? m.position.x : m.position.z);
+          for (const tr of this.traffic) {
+            if (tr.axis !== ln.axis || Math.abs(tr.c - ln.c) > 0.01 || tr.dir !== ln.dir) continue;
+            const gap = tr.pos - mine;
+            if (gap > 0 && gap < (v.len + tr.len) / 2 + 0.7) v.vel = Math.min(v.vel, tr.speed / speed);
+          }
+        }
         ds = v.vel * dt * speed;
         v.s += ds;
         if (Math.random() < dt * 12) {
@@ -828,7 +987,9 @@ export class Game {
             const b = v.blocker;
             if (b.kind === 'vehicle') b.obj.wiggle = 1;
             if (b.kind === 'pet') b.obj.t = 0, b.obj.jolt = 1;
-            if (b.kind === 'obstacle' && b.obj.mesh) b.obj.wob = 1;
+            if ((b.kind === 'obstacle' || b.kind === 'barrier') && b.obj?.mesh) b.obj.wob = 1;
+            if (b.kind === 'walker') { b.obj.jolt = 1; this.hooks.sfx.hey?.(); }
+            if (b.kind === 'traffic') this.hooks.sfx.honk('car');
             this._flashBlocker(b);
             this.hooks.sfx.bump();
             this.hooks.haptic?.([20, 30, 20]);
@@ -867,9 +1028,10 @@ export class Game {
       }
       if (ud.drum) ud.drum.rotation.y += dt * 2;
     }
-    for (const o of this.obstacles) {
+    for (const o of [...this.obstacles, ...this.barriers]) {
       if (o.wob > 0 && o.mesh) { o.wob = Math.max(0, o.wob - dt * 2.5); o.mesh.rotation.z = Math.sin(t * 30) * 0.08 * o.wob; }
     }
+    this._updateMovers(dt, t);
     for (const p of this.pets) {
       if (!p.mesh || p.state === 'gone') continue;
       p.t += dt;
@@ -902,13 +1064,6 @@ export class Game {
       this.blockT -= dt;
       this.blockMesh.visible = this.blockT > 0;
       this.blockMesh.material.opacity = Math.max(0, this.blockT / 0.7) * 0.75 * (0.6 + 0.4 * Math.sin(t * 30));
-    }
-    for (const tr of this.traffic || []) {
-      tr.pos += tr.speed * dt;
-      if (tr.pos > 26) tr.pos = -26;
-      const s = tr.dir === 1 || tr.dir === 2 ? tr.pos : -tr.pos;
-      if (tr.axis === 'x') tr.m.position.set(s, 0, tr.c);
-      else tr.m.position.set(tr.c, 0, s);
     }
     if (this.snow) {
       const a = this.snow.geometry.attributes.position;
@@ -990,10 +1145,67 @@ export class Game {
     }
   }
 
+  _updateMovers(dt, t) {
+    const exiting = this.vehicles.filter((v) => v.state === 'exit' && v.mesh);
+    // traffic keeps its distance and brakes for cars pulling out
+    for (const tr of this.traffic) {
+      const sign = this._laneSign(tr.dir);
+      let blocked = false;
+      for (const o of this.traffic) {
+        if (o === tr || o.axis !== tr.axis || Math.abs(o.c - tr.c) > 0.01 || o.dir !== tr.dir) continue;
+        const gap = o.pos - tr.pos;
+        if (gap > 0 && gap < (o.len + tr.len) / 2 + 0.6) blocked = true;
+      }
+      for (const v of exiting) {
+        const p = v.mesh.position;
+        const along = sign * (tr.axis === 'x' ? p.x : p.z);
+        const lateral = Math.abs((tr.axis === 'x' ? p.z : p.x) - tr.c);
+        const gap = along - tr.pos;
+        if (lateral < 0.55 && gap > 0 && gap < (v.len + tr.len) / 2 + 0.9) blocked = true;
+      }
+      const target = blocked ? 0 : tr.base;
+      tr.speed += (target - tr.speed) * Math.min(1, dt * (blocked ? 8 : 2));
+      tr.pos += tr.speed * dt;
+      if (tr.pos > this.trafficSpan) tr.pos = -this.trafficSpan;
+      const c = sign * tr.pos;
+      if (tr.axis === 'x') tr.m.position.set(c, 0, tr.c);
+      else tr.m.position.set(tr.c, 0, c);
+      for (const w of tr.m.userData.wheels || []) w.g.rotation.x -= (tr.speed * dt) / w.r;
+    }
+    // people stroll around the footpath and wait for cars crossing it
+    for (const w of this.walkers) {
+      const p = w.m.position;
+      const wait = exiting.some((v) => v.mesh.position.distanceTo(p) < 0.95);
+      const sp = wait ? 0 : w.speed;
+      w.s += sp * dt * w.dir;
+      const [x, z, hd] = this._walkerAt(w);
+      w.m.position.set(x, 0, z);
+      w.m.rotation.y = yawOf(hd);
+      const ud = w.m.userData;
+      if (sp > 0) w.phase += dt * 9;
+      const swing = sp > 0 ? Math.sin(w.phase) * 0.55 : 0;
+      ud.legs[0].rotation.x = swing; ud.legs[1].rotation.x = -swing;
+      ud.arms[0].rotation.x = -swing * 0.8; ud.arms[1].rotation.x = swing * 0.8;
+      w.jolt = Math.max(0, (w.jolt || 0) - dt * 2.5);
+      ud.body.position.y = Math.abs(Math.sin(w.phase)) * 0.02 * (sp > 0 ? 1 : 0) + Math.sin(w.jolt * Math.PI) * 0.18;
+    }
+  }
+
   _flashBlocker(b) {
     const L = this.level;
     const bm = this.blockMesh;
-    if (b.kind === 'vehicle') {
+    if (b.kind === 'walker' || b.kind === 'traffic') {
+      const p = b.obj.m.position;
+      const [sx, sy] = this._screen(p.x, 0.9, p.z);
+      this.fx.bang(sx, sy, 30);
+      return;
+    }
+    if (b.kind === 'barrier') {
+      const p = b.obj.mesh.position;
+      bm.position.set(p.x, 0.025, p.z);
+      const along = b.obj.side % 2 === 0;
+      bm.scale.set(along ? 1.05 : 0.5, 1, along ? 0.5 : 1.05);
+    } else if (b.kind === 'vehicle') {
       const v = b.obj;
       const [cx, cz] = this._centerOf(v);
       const horiz = isHoriz(v.dir);

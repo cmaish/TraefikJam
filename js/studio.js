@@ -1,7 +1,7 @@
 // A small turntable renderer for garage thumbnails, the garage showcase and reward reveals.
 import * as THREE from '../vendor/three.module.min.js';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
-import { buildVehicle } from './models.js';
+import { vehicleModel } from './realistic.js';
 
 let R = null;
 
@@ -39,7 +39,7 @@ function init() {
 function setModel(item, opts = {}) {
   const r = init();
   while (r.holder.children.length) r.holder.remove(r.holder.children[0]);
-  const m = buildVehicle(item, opts);
+  const m = vehicleModel(item, opts);
   r.holder.add(m);
   const len = item.len || 2;
   const d = 2.2 + len * 0.95;

@@ -153,6 +153,12 @@ export const sfx = {
     if (!ok()) return;
     (animalSounds[type] || animalSounds.chick)();
   },
+  /** A startled pedestrian: a quick rising-falling "hey!". */
+  hey() {
+    if (!ok()) return;
+    tone({ type: 'sawtooth', f: 320, f2: 520, dur: 0.09, vol: 0.14, filter: { type: 'bandpass', f: 1300 }, q: 2.5 });
+    tone({ type: 'sawtooth', f: 520, f2: 380, t: 0.09, dur: 0.14, vol: 0.12, filter: { type: 'bandpass', f: 1100 }, q: 2.5 });
+  },
   yawn() {
     if (!ok()) return;
     tone({ type: 'sine', f: 300, f2: 180, dur: 1.2, vol: 0.2, vib: 5 });

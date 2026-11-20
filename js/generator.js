@@ -49,6 +49,19 @@ export function rayCells(v, w, h) {
   return out;
 }
 
+/** Which edge a vehicle drives out through: [side, index] (sides: 0 top, 1 right, 2 bottom, 3 left). */
+export function exitOf(v) {
+  return v.dir === 0 || v.dir === 2 ? [v.dir, v.x] : [v.dir, v.y];
+}
+const edgeKey = (side, i) => side * 1000 + i;
+export function barrierSet(level) {
+  return new Set((level.barriers || []).map((b) => edgeKey(b.side, b.i)));
+}
+export function exitBarred(v, barred) {
+  const [side, i] = exitOf(v);
+  return barred.has(edgeKey(side, i));
+}
+
 /** Solve by greedy rounds. Pets are ignored (they can always be tapped away). */
 export function analyze(level) {
   const { w, h } = level;
@@ -57,6 +70,7 @@ export function analyze(level) {
   level.vehicles.forEach((v, i) => {
     for (const [x, y] of vehicleCells(v)) grid[y * w + x] = i;
   });
+  const barred = barrierSet(level);
   const remaining = new Set(level.vehicles.map((_, i) => i));
   let depth = 0;
   let freeStart = -1;
@@ -65,7 +79,7 @@ export function analyze(level) {
     const free = [];
     for (const i of remaining) {
       const ray = rayCells(level.vehicles[i], w, h);
-      if (ray.every(([x, y]) => grid[y * w + x] === -1)) free.push(i);
+      if (!exitBarred(level.vehicles[i], barred) && ray.every(([x, y]) => grid[y * w + x] === -1)) free.push(i);
     }
     if (!free.length) return { solvable: false, depth, freeStart, order };
     if (freeStart < 0) freeStart = free.length;
@@ -112,6 +126,28 @@ function attempt(p, rand) {
     obstacles.push({ x, y });
   }
 
+  // Edge barriers: runs of 1-3 closed exits along the lot's sides.
+  const barriers = [];
+  const barred = new Set();
+  const sideLen = (side) => (side % 2 === 0 ? w : h);
+  const perSide = [0, 0, 0, 0];
+  let bt = 0;
+  while (barriers.length < (p.barriers || 0) && bt++ < 60) {
+    const side = Math.floor(rand() * 4);
+    const n = sideLen(side);
+    const run = Math.min(n - 1, 1 + Math.floor(rand() * 3));
+    if (perSide[side] + run > Math.floor(n * 0.6)) continue;
+    const start = Math.floor(rand() * (n - run + 1));
+    let clash = false;
+    for (let k = 0; k < run; k++) if (barred.has(edgeKey(side, start + k))) clash = true;
+    if (clash) continue;
+    for (let k = 0; k < run && barriers.length < p.barriers; k++) {
+      barred.add(edgeKey(side, start + k));
+      barriers.push({ side, i: start + k });
+      perSide[side]++;
+    }
+  }
+
   const truckShare = p.truck || 0;
   const bias = p.bias ?? 1;
   while (vehicles.length < p.count) {
@@ -129,7 +165,7 @@ function attempt(p, rand) {
               if (cx >= w || cy >= h || grid[cy * w + cx] !== -1) { ok = false; break; }
               score += rayCount[cy * w + cx];
             }
-            if (!ok) continue;
+            if (!ok || exitBarred(v, barred)) continue;
             const ray = rayCells(v, w, h);
             for (const [rx, ry] of ray) if (grid[ry * w + rx] !== -1) { ok = false; break; }
             if (!ok) continue;
@@ -171,13 +207,13 @@ function attempt(p, rand) {
     const j = Math.floor(rand() * (i + 1));
     [vehicles[i], vehicles[j]] = [vehicles[j], vehicles[i]];
   }
-  return { w, h, vehicles, obstacles, pets };
+  return { w, h, vehicles, obstacles, pets, barriers };
 }
 
 function scoreLevel(p, lvl, info) {
   const n = lvl.vehicles.length;
   const cells = lvl.vehicles.reduce((s, v) => s + v.len, 0);
-  const density = cells / (p.w * p.h - lvl.obstacles.length);
+  const density = cells / (p.w * p.h - (lvl.obstacles || []).length);
   let score = -Math.abs(n - p.count) * 4 + density * 6;
   if (p.targetDepth) score -= Math.abs(info.depth - p.targetDepth) * 3;
   else score += info.depth * (p.depthWeight ?? 2);
@@ -195,7 +231,7 @@ function occupied(lvl) {
   const { w, h } = lvl;
   const grid = new Int16Array(w * h).fill(-1);
   for (const o of lvl.obstacles) grid[o.y * w + o.x] = -2;
-  for (const pt of lvl.pets) grid[pt.y * w + pt.x] = -3;
+  for (const pt of lvl.pets || []) grid[pt.y * w + pt.x] = -3;
   lvl.vehicles.forEach((v, i) => { for (const [x, y] of vehicleCells(v)) grid[y * w + x] = i; });
   return grid;
 }
@@ -261,10 +297,13 @@ export function rotateLevel(lvl) {
     return { ...v, x, y, dir: (v.dir + 1) % 4 };
   };
   const rotP = (o) => { const [x, y] = rc(o.x, o.y); return { ...o, x, y }; };
+  // edges turn clockwise too: top->right, right->bottom (flipped), bottom->left, left->top (flipped)
+  const rotB = (b) => ({ ...b, side: (b.side + 1) % 4, i: b.side === 1 || b.side === 3 ? h - 1 - b.i : b.i });
   return {
     ...lvl,
     w: h,
     h: w,
+    barriers: (lvl.barriers || []).map(rotB),
     vehicles: lvl.vehicles.map(rotV),
     obstacles: (lvl.obstacles || []).map(rotP),
     pets: (lvl.pets || []).map(rotP),

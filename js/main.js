@@ -6,9 +6,10 @@ import { WORLDS, LEVELS_PER_WORLD } from './worlds.js';
 import { KINDS, PATTERNS, REWARDS, COLORS, unlockedSet, rewardName } from './vehicles.js';
 import { initParent, requestSettings, openGate, openPanel, closeAll, isOpen } from './parent.js';
 import * as studio from './studio.js';
+import { loadRealistic, realisticReady, REAL, REAL_FILES } from './realistic.js';
 
 const $ = (s) => document.querySelector(s);
-const VERSION = '2.2.0';
+const VERSION = '3.0.0';
 
 // ------------------------------------------------------------ helpers ---
 
@@ -120,12 +121,22 @@ let current = 1; // level number being played
 let daily = null; // date key when playing the daily puzzle
 let showKey = '';
 
+/** Resolve once the models the current style needs are loaded (falls back to toy on failure). */
+function ensureModels() {
+  if (!settings.realistic || realisticReady()) return Promise.resolve();
+  return loadRealistic().catch(() => {
+    settings.realistic = false;
+    save();
+    toast('Couldn’t load the realistic models, so the toy ones are shown instead');
+  });
+}
+
 function showcase() {
   const n = progress.current || 1;
-  const key = `${n}|${settings.faces}|${completedCount()}`;
+  const key = `${n}|${settings.faces}|${settings.realistic}|${completedCount()}`;
   if (showKey === key && game.mode === 'show') { game.start(); return; }
   showKey = key;
-  requestAnimationFrame(() => { game.load(getLevel(n, unlocked()), 'show'); });
+  ensureModels().then(() => requestAnimationFrame(() => { if (screen === 'home') game.load(getLevel(n, unlocked()), 'show'); }));
 }
 
 function startLevel(n) {
@@ -139,7 +150,7 @@ function startLevel(n) {
   const lvl = getLevel(n, unlocked());
   setHud(lvl);
   showKey = '';
-  requestAnimationFrame(() => game.load(lvl, 'play'));
+  ensureModels().then(() => requestAnimationFrame(() => game.load(lvl, 'play')));
 }
 
 function startDaily() {
@@ -149,7 +160,7 @@ function startDaily() {
   const lvl = getDailyLevel(daily, unlocked());
   setHud(lvl);
   showKey = '';
-  requestAnimationFrame(() => game.load(lvl, 'play'));
+  ensureModels().then(() => requestAnimationFrame(() => game.load(lvl, 'play')));
 }
 
 function setHud(lvl) {
@@ -291,7 +302,7 @@ function showReward(r) {
     setTimeout(() => {
       gift.classList.add('hidden');
       view.classList.add('show');
-      studio.showcase(view, rewardItem(r), { faces: settings.faces });
+      studio.showcase(view, rewardItem(r), { faces: settings.faces, realistic: settings.realistic && !r.pattern });
       const name = rewardName(r);
       $('#reward-kicker').textContent = r.kind ? 'New vehicle' : 'New paint job';
       $('#reward-text').textContent = name;
@@ -405,9 +416,47 @@ function renderLevels() {
 const thumbs = new Map();
 let garageJob = 0;
 
+function syncStyleButtons() {
+  document.querySelectorAll('.style-btn').forEach((b) => {
+    const on = (b.dataset.style === 'real') === !!settings.realistic;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', on);
+  });
+}
+
+document.querySelectorAll('.style-btn').forEach((b) => b.addEventListener('click', async () => {
+  const want = b.dataset.style === 'real';
+  if (want === !!settings.realistic) return;
+  audio.sfx.tap();
+  if (want && !realisticReady()) {
+    b.classList.add('busy');
+    b.textContent = 'Loading…';
+    try { await loadRealistic(); } catch {
+      b.classList.remove('busy');
+      b.textContent = 'Realistic';
+      toast('Couldn’t load the realistic models. Check your connection and try again.');
+      return;
+    }
+    b.classList.remove('busy');
+    b.textContent = 'Realistic';
+  }
+  settings.realistic = want;
+  save();
+  showKey = '';
+  syncStyleButtons();
+  renderGarage();
+}));
+
 function renderGarage() {
+  syncStyleButtons();
   const list = $('#garage-list');
   list.innerHTML = '';
+  if (settings.realistic) {
+    const note = document.createElement('p');
+    note.className = 'garage-note';
+    note.textContent = 'Realistic vehicles from Kenney’s Car Kit (CC0). The school bus, ice cream truck and cement mixer have no realistic version yet, and paint jobs only show on toy-style cars.';
+    list.appendChild(note);
+  }
   const un = unlocked();
   const items = [];
   const mk = (title, entries) => {
@@ -452,8 +501,9 @@ function renderGarage() {
     if (job !== garageJob || screen !== 'garage') return;
     for (let k = 0; k < 3 && i < items.length; k++, i++) {
       const { it, img } = items[i];
-      const key = `${it.kind}|${it.pattern}|${it.color}|${settings.faces}`;
-      if (!thumbs.has(key)) thumbs.set(key, studio.thumbnail(it, 240, 180, { faces: settings.faces }));
+      const real = settings.realistic && !it.pattern;
+      const key = `${it.kind}|${it.pattern}|${it.color}|${settings.faces}|${real}`;
+      if (!thumbs.has(key)) thumbs.set(key, studio.thumbnail(it, 240, 180, { faces: settings.faces, realistic: real }));
       img.src = thumbs.get(key);
     }
     if (i < items.length) requestAnimationFrame(step);
@@ -468,7 +518,7 @@ function openShowcase(it) {
   $('#show-name').textContent = it.name;
   $('#show-sub').textContent = it.pattern ? 'Paint job for cars and trucks' : `Takes ${it.len} parking spaces`;
   $('#overlay-show').classList.add('show');
-  requestAnimationFrame(() => studio.showcase($('#show-view'), it, { faces: settings.faces }));
+  requestAnimationFrame(() => studio.showcase($('#show-view'), it, { faces: settings.faces, realistic: settings.realistic && !it.pattern }));
   audio.sfx.honk(honkFor(it.kind));
 }
 $('#show-honk').addEventListener('click', () => { if (showItem) { audio.sfx.honk(honkFor(showItem.kind)); haptic(15); } });
@@ -539,6 +589,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   });
 }
 
+if (settings.realistic) loadRealistic().catch(() => {});
 show('home');
 // fade the splash once the first 3D frame is on screen
 requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {
@@ -547,4 +598,4 @@ requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {
 }, 250)));
 
 // handy for automated tests
-window.__app = { game, startLevel, startDaily, show, settings, progress, openPanel, openGate, requestSettings };
+window.__app = { game, startLevel, startDaily, show, settings, progress, openPanel, openGate, requestSettings, loadRealistic, REAL, REAL_FILES };
