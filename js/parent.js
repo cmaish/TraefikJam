@@ -112,6 +112,17 @@ function rangeRow(key, label) {
   return row;
 }
 
+// Two-tap confirm (window.confirm is unavailable in some embedded views).
+function confirmButton(btn, label, action) {
+  let armed = null;
+  const original = btn.textContent;
+  btn.addEventListener('click', () => {
+    if (armed) { clearTimeout(armed); armed = null; btn.textContent = original; action(); return; }
+    btn.textContent = label;
+    armed = setTimeout(() => { armed = null; btn.textContent = original; }, 3000);
+  });
+}
+
 function group(title, ...rows) {
   const g = el(`<div class="pp-group"><h4>${title}</h4></div>`);
   rows.forEach((r) => g.appendChild(r));
@@ -185,22 +196,18 @@ export function openPanel() {
 
   // Reset
   const resetP = el(`<div class="pp-row"><span class="lbl">Reset progress<small>Levels, stars and garage start over</small></span><button class="pp-btn danger">Reset</button></div>`);
-  resetP.querySelector('button').addEventListener('click', () => {
-    if (confirm('Reset all progress? Levels, stars and garage surprises will start over.')) {
-      resetProgress();
-      api.onReset();
-      openPanel();
-      api.toast('Progress reset');
-    }
+  confirmButton(resetP.querySelector('button'), 'Tap again', () => {
+    resetProgress();
+    api.onReset();
+    openPanel();
+    api.toast('Progress reset');
   });
   const resetS = el(`<div class="pp-row"><span class="lbl">Reset settings<small>Back to the defaults</small></span><button class="pp-btn ghost">Reset</button></div>`);
-  resetS.querySelector('button').addEventListener('click', () => {
-    if (confirm('Reset all settings to defaults?')) {
-      resetSettings();
-      api.onSettings('*');
-      openPanel();
-      api.toast('Settings reset');
-    }
+  confirmButton(resetS.querySelector('button'), 'Tap again', () => {
+    resetSettings();
+    api.onSettings('*');
+    openPanel();
+    api.toast('Settings reset');
   });
   body.appendChild(group('Reset', resetP, resetS));
 

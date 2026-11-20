@@ -8,7 +8,7 @@ import { drawVehicle } from './draw.js';
 import { initParent, openGate, openPanel, closeAll, isOpen } from './parent.js';
 
 const $ = (s) => document.querySelector(s);
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 // ------------------------------------------------------------ helpers ---
 
@@ -41,6 +41,15 @@ for (const ev of ['pointerdown', 'touchend', 'click']) document.addEventListener
 
 let screen = 'home';
 let pushed = false;
+// Use the browser history (so Android's back button returns home) only when
+// running as the top-level page; inside an embedded frame it could move the host page.
+let useHistory = false;
+try { useHistory = window.top === window; } catch { useHistory = false; }
+
+function push(name) {
+  if (!useHistory) return false;
+  try { history.pushState({ s: name }, ''); return true; } catch { return false; }
+}
 
 function show(name) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === 'screen-' + name));
@@ -49,7 +58,7 @@ function show(name) {
   if (name === 'home') { renderHome(); homeRoad.start(); } else homeRoad.stop();
   if (name === 'levels') renderLevels();
   if (name === 'garage') renderGarage();
-  if (name !== 'home' && !pushed) { history.pushState({ s: name }, ''); pushed = true; }
+  if (name !== 'home' && !pushed) pushed = push(name);
 }
 
 function goHome() {
@@ -60,7 +69,7 @@ function goHome() {
 
 window.addEventListener('popstate', () => {
   pushed = false;
-  if (isOpen()) { closeAll(); history.pushState({ s: screen }, ''); pushed = screen !== 'home'; return; }
+  if (isOpen()) { closeAll(); pushed = screen !== 'home' && push(screen); return; }
   hideOverlays();
   show('home');
 });
@@ -476,15 +485,18 @@ initParent({
     if (open && resting) endRest();
   },
   offlineStatus: () => {
-    if (!('serviceWorker' in navigator)) return 'not supported in this browser';
+    if (!('serviceWorker' in navigator) || swFailed) return 'not available here. Open the hosted site (see README) to install it for offline play';
     return navigator.serviceWorker.controller ? `ready ✓ (v${VERSION})` : `preparing… (v${VERSION}) — reopen once while online`;
   },
 });
 
 // ------------------------------------------------------------ boot ---
 
+let swFailed = false;
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  window.addEventListener('load', () => {
+    try { navigator.serviceWorker.register('sw.js').catch(() => { swFailed = true; }); } catch { swFailed = true; }
+  });
 }
 
 if (settings.timeLimit === undefined) settings.timeLimit = 0;
