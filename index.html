@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Beep Beep Jam</title>
+  <meta name="description" content="A gentle, ad-free car parking puzzle for little drivers. Works offline.">
+  <meta name="theme-color" content="#4cc3ff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Beep Beep Jam">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" fill="currentColor"/></symbol>
+      <symbol id="i-redo" viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" fill="currentColor"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.4-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.4 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.7h4l.4-2.7a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" fill="currentColor" transform="translate(-1 0)"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M15.5 4.5 8 12l7.5 7.5" stroke="currentColor" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z" fill="currentColor"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2.5 2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.2 1.3-6.6-4.9-4.6 6.6-.8z" fill="currentColor"/></symbol>
+      <symbol id="i-map" viewBox="0 0 24 24"><path d="M4 6h4v4H4zM10 6h4v4h-4zM16 6h4v4h-4zM4 14h4v4H4zM10 14h4v4h-4zM16 14h4v4h-4z" fill="currentColor"/></symbol>
+      <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 11l1.6-4.2A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.3L19 11a2 2 0 0 1 2 2v4h-2a2 2 0 0 1-4 0H9a2 2 0 0 1-4 0H3v-4a2 2 0 0 1 2-2zm2.2 0h9.6l-1.1-3.2a.5.5 0 0 0-.5-.3H8.8a.5.5 0 0 0-.5.3z" fill="currentColor"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></symbol>
+    </defs>
+  </svg>
+
+  <div id="app">
+    <!-- HOME -->
+    <section id="screen-home" class="screen active">
+      <button class="parent-btn" data-parent aria-label="Grown-ups: press and hold">
+        <svg><use href="#i-gear"/></svg><span class="hold-ring"></span>
+      </button>
+      <div class="home-sky">
+        <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div>
+      </div>
+      <h1 class="logo"><span class="l1">Beep</span><span class="l2">Beep</span><span class="l3">Jam!</span></h1>
+      <div class="home-buttons">
+        <button id="btn-play" class="big-btn play-btn"><svg><use href="#i-play"/></svg><span id="play-label" class="play-level"></span></button>
+        <div class="home-row">
+          <button id="btn-levels" class="round-btn levels-btn" aria-label="Levels"><svg><use href="#i-map"/></svg></button>
+          <button id="btn-garage" class="round-btn garage-btn" aria-label="Garage"><svg><use href="#i-car"/></svg></button>
+        </div>
+      </div>
+      <canvas id="home-road"></canvas>
+    </section>
+
+    <!-- LEVELS -->
+    <section id="screen-levels" class="screen">
+      <header class="bar">
+        <button class="round-btn small" data-go="home" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+        <div class="bar-title"><svg class="star-ico"><use href="#i-star"/></svg> <span id="levels-stars">0</span></div>
+        <span class="bar-spacer"></span>
+      </header>
+      <div id="world-list" class="scroll"></div>
+    </section>
+
+    <!-- GARAGE -->
+    <section id="screen-garage" class="screen">
+      <header class="bar">
+        <button class="round-btn small" data-go="home" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+        <div class="bar-title">My Garage</div>
+        <span class="bar-spacer"></span>
+      </header>
+      <div id="garage-list" class="scroll"></div>
+    </section>
+
+    <!-- GAME -->
+    <section id="screen-game" class="screen">
+      <header class="bar game-bar">
+        <button id="btn-game-home" class="round-btn small" aria-label="Home"><svg><use href="#i-home"/></svg></button>
+        <div class="progress-wrap">
+          <div class="level-tag" id="level-tag"></div>
+          <div class="progress"><div class="progress-fill" id="progress-fill"></div><div class="progress-car" id="progress-car"><svg><use href="#i-car"/></svg></div></div>
+        </div>
+        <button id="btn-restart" class="round-btn small" aria-label="Start again"><svg><use href="#i-redo"/></svg></button>
+      </header>
+      <div class="board-wrap"><canvas id="board"></canvas></div>
+    </section>
+
+    <!-- WIN -->
+    <div id="overlay-win" class="overlay">
+      <div class="card win-card">
+        <div class="win-title" id="win-title">Yay!</div>
+        <div class="win-stars">
+          <svg class="wstar"><use href="#i-star"/></svg>
+          <svg class="wstar"><use href="#i-star"/></svg>
+          <svg class="wstar"><use href="#i-star"/></svg>
+        </div>
+        <div class="win-buttons">
+          <button id="btn-replay" class="round-btn" aria-label="Play again"><svg><use href="#i-redo"/></svg></button>
+          <button id="btn-next" class="big-btn next-btn" aria-label="Next level"><svg><use href="#i-play"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- REWARD -->
+    <div id="overlay-reward" class="overlay">
+      <div class="reward-stage">
+        <div class="reward-text" id="reward-text">A present!</div>
+        <button id="gift" class="gift" aria-label="Open the present">
+          <span class="gift-lid"></span><span class="gift-box"></span><span class="gift-ribbon"></span>
+        </button>
+        <canvas id="reward-canvas" width="300" height="300"></canvas>
+        <button id="btn-reward-ok" class="big-btn next-btn hidden" aria-label="Keep playing"><svg><use href="#i-play"/></svg></button>
+      </div>
+    </div>
+
+    <!-- REST (time limit) -->
+    <div id="overlay-rest" class="overlay rest">
+      <div class="rest-stage">
+        <div class="moon"></div>
+        <canvas id="rest-canvas" width="300" height="200"></canvas>
+        <div class="rest-text">Time for a rest!</div>
+        <div class="zzz"><span>z</span><span>z</span><span>z</span></div>
+        <button class="parent-btn rest-parent" data-parent aria-label="Grown-ups: press and hold">
+          <svg><use href="#i-gear"/></svg><span class="hold-ring"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- PARENT GATE -->
+    <div id="overlay-gate" class="overlay">
+      <div class="card gate-card">
+        <div class="gate-title">Grown-ups only</div>
+        <div class="gate-q" id="gate-q"></div>
+        <div class="gate-answers" id="gate-answers"></div>
+        <button class="link-btn" id="gate-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <!-- PARENT PANEL -->
+    <div id="overlay-parent" class="overlay">
+      <div class="parent-panel">
+        <header class="pp-head">
+          <h2>Grown-ups</h2>
+          <button class="round-btn small" id="pp-close" aria-label="Close"><svg><use href="#i-x"/></svg></button>
+        </header>
+        <div class="pp-body" id="pp-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

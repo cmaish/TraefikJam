@@ -1,0 +1,20 @@
+// Verifies the service worker makes the game work with no network.
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright');
+const base = process.env.BASE || 'http://localhost:8123/';
+const browser = await chromium.launch();
+const ctx = await browser.newContext();
+const page = await ctx.newPage();
+await page.goto(base);
+await page.evaluate(() => navigator.serviceWorker.ready);
+await page.reload();
+const controlled = await page.evaluate(() => !!navigator.serviceWorker.controller);
+await ctx.setOffline(true);
+await page.reload();
+await page.evaluate(() => window.__app.startLevel(50));
+await page.waitForTimeout(600);
+const ok = await page.evaluate(() => window.__app.game.vehicles.length > 0);
+console.log('controlled:', controlled, 'offline play works:', ok);
+await browser.close();
+process.exit(controlled && ok ? 0 : 1);
