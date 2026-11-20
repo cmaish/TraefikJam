@@ -176,8 +176,26 @@ function wheel(parent, x, y, z, r, w) {
 }
 
 function lights(body, W, L, y, front = true, rear = true) {
-  if (front) for (const s of [-1, 1]) mesh(rbox(0.16, 0.07, 0.04, 0.02), M.glow(0xfff4cc, 1.8), s * W * 0.3, y, -L / 2 - 0.005, body);
-  if (rear) for (const s of [-1, 1]) mesh(rbox(0.14, 0.06, 0.04, 0.02), M.glow(0xff2a2a, 1.2), s * W * 0.3, y, L / 2 + 0.005, body);
+  if (front) for (const s of [-1, 1]) mesh(rbox(0.2, 0.09, 0.1, 0.03), M.glow(0xfff6d8, 2.4), s * W * 0.3, y, -L / 2 + 0.035, body);
+  if (rear) for (const s of [-1, 1]) mesh(rbox(0.2, 0.07, 0.07, 0.025), M.glow(0xff1f2e, 1.7), s * W * 0.32, y, L / 2 + 0.01, body);
+}
+
+// A forward-pointing chevron painted on the hood: the clearest "this way" cue from above.
+function hoodArrow(parent, y, z, w) {
+  const g = geo('chev' + w, () => {
+    const sh = new THREE.Shape();
+    const a = w / 2, t = w * 0.22, d = w * 0.42;
+    sh.moveTo(0, d); sh.lineTo(a, 0); sh.lineTo(a, -t); sh.lineTo(0, d - t * 1.3); sh.lineTo(-a, -t); sh.lineTo(-a, 0); sh.closePath();
+    const sg = new THREE.ShapeGeometry(sh);
+    sg.rotateX(-Math.PI / 2); // lie flat, tip pointing to -Z (forward)
+    return sg;
+  });
+  const m = mat('chevron', () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, transparent: true, opacity: 0.88, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, depthWrite: false, envMapIntensity: 0.4 }));
+  const o = new THREE.Mesh(g, m);
+  o.position.set(0, y, z);
+  o.renderOrder = 1;
+  parent.add(o);
+  return o;
 }
 
 function lightBar(body, y, z, a, b, list) {
@@ -231,19 +249,26 @@ export function buildVehicle(v, opts = {}) {
 
   const sedan = (c, opt = {}) => {
     const h = opt.h || 0.2;
+    const top = 0.17 + h;
     mesh(rbox(W * 0.94, 0.1, L * 0.96, 0.04), M.dark(), 0, 0.14, 0, body);
     mesh(rbox(W, h, L, 0.08), P(c), 0, 0.17 + h / 2, 0, body);
-    const cz = opt.cabinZ ?? L * 0.06;
-    const cl = opt.cabinL ?? L * 0.5;
-    mesh(rbox(W * 0.8, 0.19, cl, 0.08), M.glass(), 0, 0.17 + h + 0.08, cz, body);
-    mesh(rbox(W * 0.74, 0.05, cl * 0.78, 0.025), P(opt.roof ?? c), 0, 0.17 + h + 0.18, cz + cl * 0.04, body);
-    mesh(rbox(W * 0.5, 0.05, 0.03, 0.01), M.dark(), 0, 0.22, -L / 2 - 0.005, body);
-    mesh(rbox(0.2, 0.07, 0.02, 0.01), M.matte(0xf4f4f0), 0, 0.24, L / 2 + 0.008, body);
-    for (const s of [-1, 1]) mesh(rbox(0.07, 0.05, 0.05, 0.015), P(c), s * (W / 2 + 0.03), 0.17 + h + 0.03, cz - cl / 2 + 0.04, body);
-    lights(body, W, L, 0.27);
+    // cabin sits towards the back: long hood in front, short trunk behind
+    const cz = opt.cabinZ ?? L * 0.14;
+    const cl = opt.cabinL ?? L * 0.44;
+    mesh(rbox(W * 0.8, 0.19, cl, 0.08), M.glass(), 0, top + 0.08, cz, body);
+    // raked windshield: a lower glass step in front of the cabin
+    mesh(rbox(W * 0.76, 0.1, 0.16, 0.05), M.glass(), 0, top + 0.035, cz - cl / 2 - 0.05, body);
+    mesh(rbox(W * 0.74, 0.05, cl * 0.72, 0.025), P(opt.roof ?? c), 0, top + 0.18, cz + cl * 0.08, body);
+    // front: dark grille + chrome bumper; back: body bumper + plate
+    mesh(rbox(W * 0.62, 0.07, 0.04, 0.015), M.dark(), 0, 0.27, -L / 2 - 0.004, body);
+    mesh(rbox(W * 0.96, 0.06, 0.07, 0.03), M.chrome(), 0, 0.19, -L / 2 - 0.012, body);
+    mesh(rbox(0.2, 0.07, 0.02, 0.01), M.matte(0xf4f4f0), 0, 0.24, L / 2 + 0.012, body);
+    for (const s of [-1, 1]) mesh(rbox(0.07, 0.05, 0.05, 0.015), P(c), s * (W / 2 + 0.03), top + 0.03, cz - cl / 2 + 0.02, body);
+    lights(body, W, L, 0.3);
+    if (opt.arrow !== false) hoodArrow(body, top + 0.004, -L / 2 + (cz - cl / 2 - 0.13 + L / 2) * 0.5, W * 0.46);
     for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.035), 0.15, z, 0.15, 0.11);
-    eyeY = 0.17 + h + 0.1; eyeZ = cz - cl / 2 - 0.02;
-    return 0.17 + h; // top of hood
+    eyeY = top + 0.1; eyeZ = cz - cl / 2 - 0.02;
+    return top; // top of hood
   };
 
   const truckBase = (cabC, cargoLen) => {

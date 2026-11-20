@@ -8,7 +8,7 @@ import { initParent, requestSettings, openGate, openPanel, closeAll, isOpen } fr
 import * as studio from './studio.js';
 
 const $ = (s) => document.querySelector(s);
-const VERSION = '2.1.1';
+const VERSION = '2.1.2';
 
 // ------------------------------------------------------------ helpers ---
 
