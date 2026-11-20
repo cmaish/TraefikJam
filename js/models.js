@@ -180,6 +180,44 @@ function lights(body, W, L, y, front = true, rear = true) {
   if (rear) for (const s of [-1, 1]) mesh(rbox(0.2, 0.07, 0.07, 0.025), M.glow(0xff1f2e, 1.7), s * W * 0.32, y, L / 2 + 0.01, body);
 }
 
+/** A box whose front (-Z) end is narrowed and lowered: noses, wedges, engine covers. */
+function wedge(w, h, d, frontW = 0.5, frontH = 0.5) {
+  return geo(`wd${w}|${h}|${d}|${frontW}|${frontH}`, () => {
+    const g = new THREE.BoxGeometry(w, h, d);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getZ(i) < 0) {
+        pos.setX(i, pos.getX(i) * frontW);
+        if (pos.getY(i) > 0) pos.setY(i, -h / 2 + h * frontH);
+      }
+    }
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+function roundel(parent, n, x, y, z, size, rotZ = 0) {
+  const m = mat('roundel' + n, () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const t = c.getContext('2d');
+    t.fillStyle = '#fff'; t.beginPath(); t.arc(64, 64, 60, 0, 7); t.fill();
+    t.lineWidth = 8; t.strokeStyle = '#1b1f2a'; t.stroke();
+    t.fillStyle = '#1b1f2a'; t.font = 'bold 84px system-ui, sans-serif'; t.textAlign = 'center'; t.textBaseline = 'middle';
+    t.fillText(String(n), 64, 70);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, depthWrite: false });
+  });
+  const o = new THREE.Mesh(geo('roundelPlane', () => new THREE.PlaneGeometry(1, 1)), m);
+  o.scale.set(size, size, 1);
+  o.rotation.set(-Math.PI / 2, 0, rotZ);
+  o.position.set(x, y, z);
+  o.renderOrder = 1;
+  parent.add(o);
+  return o;
+}
+
 // A forward-pointing chevron painted on the hood: the clearest "this way" cue from above.
 function hoodArrow(parent, y, z, w) {
   const g = geo('chev' + w, () => {
@@ -282,6 +320,8 @@ export function buildVehicle(v, opts = {}) {
     for (const s of [-1, 1]) mesh(rbox(0.05, 0.14, 0.04, 0.015), M.dark(), s * (W / 2 + 0.035), 0.52, -L / 2 + 0.12, body);
     lights(body, W, L, 0.33, true, true);
     for (const z of [-L / 2 + 0.38, L / 2 - 0.38, L / 2 - 0.82]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.04), 0.16, z, 0.16, 0.12);
+    const tank = mesh(cyl(0.075, 0.075, 0.26, 14), M.chrome(), -(W / 2 - 0.05), 0.23, -L / 2 + 0.95, body);
+    tank.rotation.x = Math.PI / 2;
     eyeY = 0.55; eyeZ = -L / 2 - 0.02;
     return { cargoZ: -L / 2 + cabL + 0.04 + (cargoLen ?? L - cabL - 0.04) / 2, cargoL: cargoLen ?? L - cabL - 0.04 };
   };
@@ -301,44 +341,95 @@ export function buildVehicle(v, opts = {}) {
       break;
     }
     case 'ambulance': {
+      const white = M.paint(0xf6f7fb), red = M.matte(0xff3040);
       mesh(rbox(W * 0.94, 0.1, L * 0.96, 0.04), M.dark(), 0, 0.14, 0, body);
-      mesh(rbox(W, 0.5, L, 0.1), M.paint(0xf6f7fb), 0, 0.42, 0, body);
-      mesh(rbox(W * 0.86, 0.17, 0.08, 0.04), M.glass(), 0, 0.52, -L / 2 + 0.02, body);
-      for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.01, 0.07, L * 0.9), M.matte(0xff3040), s * (W / 2 + 0.002), 0.36, 0, body);
-      mesh(new THREE.BoxGeometry(0.1, 0.012, 0.3), M.matte(0xff3040), 0, 0.675, 0.15, body);
-      mesh(new THREE.BoxGeometry(0.3, 0.012, 0.1), M.matte(0xff3040), 0, 0.675, 0.15, body);
-      lightBar(body, 0.68, -L * 0.3, 0xff2020, 0xff2020, sirens);
-      lights(body, W, L, 0.3);
-      for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.035), 0.15, z, 0.15, 0.11);
-      eyeY = 0.53; eyeZ = -L / 2 - 0.03;
+      const hoodL = 0.4;
+      mesh(rbox(W, 0.28, hoodL + 0.1, 0.08), white, 0, 0.3, -L / 2 + (hoodL + 0.1) / 2, body);
+      const boxL = L - hoodL;
+      const bz = -L / 2 + hoodL + boxL / 2;
+      mesh(rbox(W, 0.58, boxL, 0.08), white, 0, 0.44, bz, body);
+      // raked windshield + cab side windows
+      mesh(rbox(W * 0.86, 0.2, 0.1, 0.04), M.glass(), 0, 0.5, -L / 2 + hoodL + 0.01, body);
+      for (const sx of [-1, 1]) mesh(rbox(0.02, 0.15, 0.24, 0.02), M.glass(), sx * (W / 2 + 0.002), 0.55, -L / 2 + hoodL + 0.14, body);
+      // stripes, crosses, rear doors
+      for (const sx of [-1, 1]) {
+        mesh(new THREE.BoxGeometry(0.01, 0.07, L * 0.92), red, sx * (W / 2 + 0.004), 0.33, 0, body);
+        mesh(new THREE.BoxGeometry(0.01, 0.2, 0.06), red, sx * (W / 2 + 0.005), 0.53, bz + 0.12, body);
+        mesh(new THREE.BoxGeometry(0.01, 0.06, 0.2), red, sx * (W / 2 + 0.005), 0.53, bz + 0.12, body);
+      }
+      mesh(new THREE.BoxGeometry(0.1, 0.012, 0.32), red, 0, 0.735, bz + 0.12, body);
+      mesh(new THREE.BoxGeometry(0.32, 0.012, 0.1), red, 0, 0.735, bz + 0.12, body);
+      mesh(new THREE.BoxGeometry(0.012, 0.42, 0.012), M.dark(), 0, 0.44, L / 2 + 0.003, body);
+      mesh(rbox(W * 0.96, 0.06, 0.07, 0.03), M.chrome(), 0, 0.19, -L / 2 - 0.012, body);
+      lightBar(body, 0.74, -L / 2 + hoodL + 0.12, 0xff2020, 0x2060ff, sirens);
+      lights(body, W, L, 0.33);
+      for (const z of [-L * 0.31, L * 0.31]) for (const sx of [-1, 1]) wheel(body, sx * (W / 2 - 0.035), 0.15, z, 0.15, 0.11);
+      eyeY = 0.52; eyeZ = -L / 2 + hoodL - 0.04;
       break;
     }
     case 'racecar': {
-      mesh(rbox(W * 0.9, 0.06, L * 0.96, 0.03), M.dark(), 0, 0.1, 0, body);
-      mesh(rbox(W * 0.98, 0.15, L * 0.96, 0.07), P(col), 0, 0.2, 0, body);
-      mesh(rbox(W * 0.6, 0.13, L * 0.32, 0.06), M.glass(), 0, 0.31, L * 0.05, body);
-      mesh(new THREE.BoxGeometry(0.1, 0.005, L * 0.95), M.matte(0xffffff), -0.08, 0.278, 0, body);
-      mesh(new THREE.BoxGeometry(0.1, 0.005, L * 0.95), M.matte(0xffffff), 0.08, 0.278, 0, body);
-      for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), M.dark(), s * 0.22, 0.34, L / 2 - 0.1, body);
-      mesh(rbox(W * 1.02, 0.04, 0.16, 0.02), P(col), 0, 0.43, L / 2 - 0.1, body);
-      lights(body, W, L, 0.22);
-      for (const z of [-L * 0.32, L * 0.3]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.02), 0.14, z, 0.14, 0.15);
-      eyeY = 0.33; eyeZ = L * 0.05 - L * 0.16 - 0.02;
+      const paint = P(col);
+      const accent = M.paint(0xffffff);
+      // floor plank + pointed nose
+      mesh(rbox(W * 0.5, 0.04, L * 0.86, 0.015), M.dark(), 0, 0.085, 0.02, body);
+      mesh(wedge(0.3, 0.13, L * 0.42, 0.45, 0.45), paint, 0, 0.17, -L * 0.27, body);
+      mesh(rbox(0.06, 0.006, L * 0.36, 0.003), accent, 0, 0.215, -L * 0.24, body);
+      // front wing with end plates
+      mesh(rbox(W * 1.04, 0.03, 0.15, 0.012), paint, 0, 0.085, -L / 2 + 0.06, body);
+      for (const s of [-1, 1]) mesh(rbox(0.025, 0.09, 0.18, 0.01), M.dark(), s * W * 0.52, 0.11, -L / 2 + 0.06, body);
+      // cockpit tub, driver and airbox
+      mesh(rbox(0.36, 0.17, L * 0.3, 0.06), paint, 0, 0.2, -L * 0.02, body);
+      mesh(rbox(0.22, 0.03, 0.27, 0.012), M.dark(), 0, 0.285, -L * 0.03, body);
+      mesh(sph(0.075, 16), M.paint(0xffd23f), 0, 0.31, -L * 0.0, body);
+      mesh(rbox(0.11, 0.035, 0.05, 0.015), M.glass(), 0, 0.32, -L * 0.0 - 0.055, body);
+      mesh(rbox(0.2, 0.05, 0.03, 0.012), M.glass(), 0, 0.31, -L * 0.1, body);
+      mesh(rbox(0.13, 0.1, 0.16, 0.04), paint, 0, 0.33, L * 0.09, body);
+      // side pods with race numbers
+      mesh(rbox(W * 0.8, 0.13, L * 0.3, 0.05), paint, 0, 0.165, L * 0.13, body);
+      for (const sx of [-1, 1]) roundel(body, 7, sx * W * 0.27, 0.232, L * 0.13, 0.17, sx * Math.PI / 2);
+      // engine cover tapering to the back
+      const ec = mesh(wedge(0.32, 0.17, L * 0.32, 0.4, 0.4), paint, 0, 0.2, L * 0.3, body);
+      ec.rotation.y = Math.PI;
+      // rear wing on two pylons
+      for (const sx of [-1, 1]) mesh(rbox(0.03, 0.18, 0.05, 0.01), M.dark(), sx * 0.1, 0.33, L / 2 - 0.1, body);
+      mesh(rbox(W * 0.94, 0.04, 0.17, 0.015), paint, 0, 0.43, L / 2 - 0.08, body);
+      mesh(rbox(W * 0.94, 0.006, 0.04, 0.003), accent, 0, 0.452, L / 2 - 0.13, body);
+      for (const sx of [-1, 1]) mesh(rbox(0.025, 0.17, 0.21, 0.01), M.dark(), sx * W * 0.47, 0.39, L / 2 - 0.08, body);
+      mesh(rbox(0.08, 0.04, 0.02, 0.01), M.glow(0xff1f2e, 1.8), 0, 0.2, L / 2 + 0.01, body);
+      // big exposed slicks: narrow at the front, fat at the back
+      for (const sx of [-1, 1]) wheel(body, sx * (W / 2 - 0.04), 0.135, -L * 0.3, 0.135, 0.12);
+      for (const sx of [-1, 1]) wheel(body, sx * (W / 2 - 0.03), 0.165, L * 0.3, 0.165, 0.17);
+      eyeY = 0.31; eyeZ = -L * 0.1 - 0.02;
       break;
     }
     case 'jeep': {
+      const tan = M.paint(0xc9a46a);
       mesh(rbox(W * 0.94, 0.1, L * 0.96, 0.03), M.dark(), 0, 0.17, 0, body);
-      mesh(rbox(W, 0.24, L, 0.04), M.paint(0xc9a46a), 0, 0.32, 0, body);
-      mesh(rbox(W * 0.86, 0.17, 0.05, 0.02), M.glass(), 0, 0.52, -L * 0.12, body);
-      // roll bar + seats
-      for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.04, 0.22, 0.04), M.dark(), s * W * 0.4, 0.55, L * 0.15, body);
-      mesh(new THREE.BoxGeometry(W * 0.84, 0.04, 0.04), M.dark(), 0, 0.66, L * 0.15, body);
-      for (const s of [-1, 1]) mesh(rbox(0.22, 0.12, 0.2, 0.04), M.matte(0x5b3b22), s * 0.15, 0.5, L * 0.02, body);
-      const sp = mesh(cyl(0.15, 0.15, 0.1, 18), M.rubber(), 0, 0.36, L / 2 + 0.06, body);
+      mesh(rbox(W, 0.24, L, 0.04), tan, 0, 0.32, 0, body);
+      mesh(rbox(W * 0.86, 0.02, L * 0.52, 0.01), M.dark(), 0, 0.445, L * 0.12, body); // open tub floor
+      // grille with slots + bumper
+      mesh(rbox(W * 0.6, 0.15, 0.03, 0.01), M.dark(), 0, 0.33, -L / 2 - 0.006, body);
+      for (let i = -3; i <= 3; i++) mesh(new THREE.BoxGeometry(0.018, 0.11, 0.012), M.chrome(), i * 0.055, 0.33, -L / 2 - 0.022, body);
+      mesh(rbox(W * 1.02, 0.07, 0.08, 0.02), M.dark(), 0, 0.2, -L / 2 - 0.02, body);
+      // fold-down windshield frame
+      mesh(rbox(W * 0.9, 0.2, 0.035, 0.012), M.dark(), 0, 0.55, -L * 0.1, body);
+      mesh(rbox(W * 0.8, 0.15, 0.04, 0.01), M.glass(), 0, 0.55, -L * 0.1, body);
+      // seats, roll bar, spare wheel
+      for (const sx of [-1, 1]) {
+        mesh(rbox(0.22, 0.1, 0.2, 0.04), M.matte(0x5b3b22), sx * 0.15, 0.5, L * 0.04, body);
+        mesh(rbox(0.22, 0.2, 0.06, 0.03), M.matte(0x5b3b22), sx * 0.15, 0.58, L * 0.12, body);
+      }
+      for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.04, 0.26, 0.04), M.dark(), sx * W * 0.42, 0.57, L * 0.22, body);
+      mesh(new THREE.BoxGeometry(W * 0.88, 0.04, 0.04), M.dark(), 0, 0.7, L * 0.22, body);
+      const sp = mesh(cyl(0.15, 0.15, 0.1, 18), M.rubber(), 0, 0.37, L / 2 + 0.06, body);
       sp.rotation.x = Math.PI / 2;
-      lights(body, W, L, 0.36);
-      for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.02), 0.17, z, 0.17, 0.13);
-      eyeY = 0.53; eyeZ = -L * 0.12 - 0.04;
+      const hub = mesh(cyl(0.07, 0.07, 0.11, 12), tan, 0, 0.37, L / 2 + 0.06, body);
+      hub.rotation.x = Math.PI / 2;
+      // chunky fenders over the tyres
+      for (const z of [-L * 0.31, L * 0.31]) for (const sx of [-1, 1]) mesh(rbox(0.12, 0.05, 0.42, 0.02), M.dark(), sx * (W / 2 + 0.02), 0.36, z, body);
+      lights(body, W, L, 0.38);
+      for (const z of [-L * 0.31, L * 0.31]) for (const sx of [-1, 1]) wheel(body, sx * (W / 2 - 0.02), 0.17, z, 0.17, 0.14);
+      eyeY = 0.55; eyeZ = -L * 0.1 - 0.04;
       break;
     }
     case 'tractor': {
@@ -371,6 +462,10 @@ export function buildVehicle(v, opts = {}) {
       mesh(rbox(W * 0.86, 0.2, 0.06, 0.03), M.glass(), 0, 0.55, -L / 2 + 0.01, body);
       for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.012, 0.03, L * 0.98), M.matte(0x1a1a1a), s * (W / 2 + 0.003), 0.4, 0, body);
       mesh(rbox(W * 0.7, 0.03, L * 0.8, 0.015), M.matte(0xf3f3f3), 0, 0.75, 0, body);
+      mesh(rbox(0.3, 0.03, 0.26, 0.012), M.matte(0xd9dde4), 0, 0.77, L * 0.12, body);
+      for (let z = -L / 2 + 0.42; z < L / 2 - 0.1; z += 0.26) for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.016, 0.16, 0.045), M.paint(0xffc01a), sx * (W / 2 + 0.009), 0.56, z, body);
+      mesh(rbox(W * 1.0, 0.07, 0.07, 0.03), M.dark(), 0, 0.2, -L / 2 - 0.01, body);
+      mesh(rbox(W * 1.0, 0.07, 0.07, 0.03), M.dark(), 0, 0.2, L / 2 + 0.01, body);
       lights(body, W, L, 0.3);
       for (const z of [-L / 2 + 0.4, L / 2 - 0.45]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.04), 0.16, z, 0.16, 0.12);
       eyeY = 0.56; eyeZ = -L / 2 - 0.03;
@@ -389,7 +484,15 @@ export function buildVehicle(v, opts = {}) {
       const { cargoZ, cargoL } = truckBase(0xff8fc8);
       mesh(rbox(W * 0.98, 0.58, cargoL, 0.08), M.paint(0xfff4fa), 0, 0.51, cargoZ, body);
       mesh(rbox(W + 0.01, 0.12, cargoL * 0.96, 0.04), M.paint(0xff8fc8), 0, 0.3, cargoZ, body);
-      for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.01, 0.2, cargoL * 0.5), M.glass(), s * (W * 0.49 + 0.003), 0.55, cargoZ, body);
+      for (const s of [-1, 1]) {
+        mesh(new THREE.BoxGeometry(0.01, 0.2, cargoL * 0.5), M.glass(), s * (W * 0.49 + 0.003), 0.55, cargoZ, body);
+        // striped awning over the serving window
+        const n = 6, seg = (cargoL * 0.56) / n;
+        for (let i = 0; i < n; i++) {
+          const a = mesh(new THREE.BoxGeometry(0.11, 0.015, seg), M.matte(i % 2 ? 0xffffff : 0xff6fae), s * (W / 2 + 0.045), 0.69, cargoZ - cargoL * 0.28 + seg * (i + 0.5), body);
+          a.rotation.z = -s * 0.45;
+        }
+      }
       const cz = cargoZ;
       const c = mesh(cone(0.11, 0.26, 12), M.flat(0xdca35e), 0, 0.92, cz, body);
       c.rotation.x = Math.PI;
@@ -426,6 +529,10 @@ export function buildVehicle(v, opts = {}) {
       });
       drum = mesh(dg, tex, 0, 0, 0, pivot);
       drum.rotation.x = Math.PI / 2;
+      for (const dz of [-cargoL * 0.32, cargoL * 0.3]) for (const sx of [-1, 1]) mesh(rbox(0.05, 0.3, 0.06, 0.015), M.dark(), sx * 0.2, 0.33, cargoZ + dz, body);
+      const chute = mesh(rbox(0.12, 0.03, 0.3, 0.01), M.dark(), 0, 0.42, L / 2 - 0.02, body);
+      chute.rotation.x = 0.5;
+      mesh(cyl(0.09, 0.09, 0.18, 12), M.chrome(), W * 0.33, 0.28, -L / 2 + 0.95, body).rotation.x = Math.PI / 2;
       break;
     }
     default: {
