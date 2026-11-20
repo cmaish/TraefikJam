@@ -8,7 +8,7 @@ import { initParent, requestSettings, openGate, openPanel, closeAll, isOpen } fr
 import * as studio from './studio.js';
 
 const $ = (s) => document.querySelector(s);
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 
 // ------------------------------------------------------------ helpers ---
 
@@ -93,20 +93,28 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
 
 // ------------------------------------------------------------ game ---
 
-const game = new Game($('#board'), $('#fx'), {
+let game;
+try {
+  game = new Game($('#board'), $('#fx'), {
   settings: () => settings,
   sfx: audio.sfx,
   haptic,
   onFirstInput: firstInput,
   onExit: (n, total) => updateProgress(n, total),
   onWin: (st) => onWin(st),
+  onBump: (n) => updateHudStars(n, true),
   hudHeight: () => { const r = $('#hud').getBoundingClientRect(); return r.bottom > 0 ? r.bottom : 70; },
   showInsets: () => {
     const logo = $('.logo').getBoundingClientRect();
     const bottom = $('.home-bottom').getBoundingClientRect();
     return { top: Math.max(0, logo.bottom), bottom: Math.max(0, window.innerHeight - bottom.top) };
   },
-});
+  });
+} catch (err) {
+  $('#splash-msg').textContent = 'This device or browser can’t show 3D graphics (WebGL is turned off or unsupported). Try another browser, or update this one.';
+  document.querySelector('.splash-road').remove();
+  throw err;
+}
 
 let current = 1; // level number being played
 let daily = null; // date key when playing the daily puzzle
@@ -152,11 +160,20 @@ function setHud(lvl) {
   else t = settings.showLevelNumbers ? `${W.icon} Level ${lvl.n}` : `${W.icon} ${W.name}`;
   $('#level-tag').textContent = t;
   updateProgress(0, lvl.vehicles.length);
+  updateHudStars(0, false);
 }
 
 function updateProgress(n, total) {
   $('#progress-fill').style.width = (total ? (n / total) * 100 : 0) + '%';
-  $('#hud-count').textContent = `${n} / ${total}`;
+  $('#hud-count').textContent = `${total - n} left`;
+}
+
+function updateHudStars(bumps, bumped) {
+  const box = $('#hud-stars');
+  box.classList.toggle('hide', settings.stars === 'gentle');
+  const stars = starsFor({ bumps });
+  box.querySelectorAll('svg').forEach((s, i) => s.classList.toggle('lost', i >= stars));
+  if (bumped && settings.stars !== 'gentle') { box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake'); }
 }
 
 function starsFor(st) {
@@ -523,6 +540,11 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 show('home');
+// fade the splash once the first 3D frame is on screen
+requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {
+  $('#splash').classList.add('out');
+  setTimeout(() => $('#splash').remove(), 500);
+}, 250)));
 
 // handy for automated tests
 window.__app = { game, startLevel, startDaily, show, settings, progress, openPanel, openGate, requestSettings };

@@ -49,6 +49,11 @@ export class FX {
     }
   }
 
+  /** A red "!" bubble that pops above whatever got bumped into. */
+  bang(x, y, size) {
+    this.add({ type: 'bang', x, y, vx: 0, vy: -size * 0.6, drag: 0.9, life: 0.9, size, color: '#ff3b4e' });
+  }
+
   update(dt) {
     const p = this.p;
     for (let i = p.length - 1; i >= 0; i--) {
@@ -70,7 +75,19 @@ export class FX {
       ctx.rotate(o.rot);
       ctx.globalAlpha = Math.max(0, Math.min(1, (1 - k) * 2));
       ctx.fillStyle = o.color;
-      if (o.type === 'puff') {
+      if (o.type === 'bang') {
+        ctx.rotate(-o.rot);
+        const pop = Math.min(1, o.age / 0.12);
+        const sc = 0.6 + 0.5 * pop - 0.1 * Math.max(0, (o.age - 0.12) / 0.2) * (o.age < 0.32 ? 1 : 0);
+        ctx.scale(sc, sc);
+        ctx.globalAlpha = Math.max(0, Math.min(1, (1 - k) * 3));
+        ctx.beginPath(); ctx.arc(0, 0, o.size * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff3b4e'; ctx.fill();
+        ctx.lineWidth = o.size * 0.09; ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-o.size * 0.06, -o.size * 0.3, o.size * 0.12, o.size * 0.34);
+        ctx.beginPath(); ctx.arc(0, o.size * 0.2, o.size * 0.07, 0, Math.PI * 2); ctx.fill();
+      } else if (o.type === 'puff') {
         ctx.beginPath(); ctx.arc(0, 0, o.size * (1 + k * 1.5), 0, Math.PI * 2); ctx.fill();
       } else if (o.type === 'star') {
         starPath(ctx, 0, 0, o.size); ctx.fill();

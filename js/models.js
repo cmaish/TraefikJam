@@ -2,12 +2,13 @@
 // Everything faces -Z ("forward") and sits on y = 0. 1 unit = 1 parking cell.
 import * as THREE from '../vendor/three.module.min.js';
 import { RoundedBoxGeometry } from '../vendor/RoundedBoxGeometry.js';
+import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
 
 // ------------------------------------------------------------ caches ---
 
 const geos = new Map();
 function geo(key, make) {
-  if (!geos.has(key)) geos.set(key, make());
+  if (!geos.has(key)) { const g = make(); g.userData.cached = true; geos.set(key, g); }
   return geos.get(key);
 }
 export const rbox = (w, h, d, r = 0.05, seg = 3) =>
@@ -20,7 +21,7 @@ const torus = (r, t) => geo(`to${r}|${t}`, () => new THREE.TorusGeometry(r, t, 8
 
 const mats = new Map();
 function mat(key, make) {
-  if (!mats.has(key)) mats.set(key, make());
+  if (!mats.has(key)) { const m = make(); m.userData.cached = true; if (m.map) m.map.userData.cached = true; mats.set(key, m); }
   return mats.get(key);
 }
 const std = (o) => new THREE.MeshStandardMaterial({ envMapIntensity: 0.55, ...o });
@@ -43,6 +44,76 @@ function mesh(g, m, x = 0, y = 0, z = 0, parent) {
   o.castShadow = g.boundingSphere.radius > 0.14; // tiny trim pieces don't need shadows
   o.receiveShadow = true;
   if (parent) parent.add(o);
+  return o;
+}
+
+// ------------------------------------------------------------ merging ---
+
+const KEEP = ['position', 'normal', 'uv'];
+
+/**
+ * Bake every static mesh under `root` into one mesh per material (and shadow flag),
+ * so a vehicle or a field of scenery costs a handful of draw calls instead of dozens.
+ * Meshes inside anything in `skip` stay separate (they animate on their own).
+ */
+export function mergeStatic(root, skip = []) {
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const skipSet = new Set(skip.filter(Boolean));
+  const skipped = (o) => { for (let p = o; p && p !== root; p = p.parent) if (skipSet.has(p)) return true; return false; };
+  const buckets = new Map();
+  const gone = [];
+  const rel = new THREE.Matrix4();
+  root.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || skipped(o)) return;
+    let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (!KEEP.includes(k)) g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    if (!g.attributes.normal) g.computeVertexNormals();
+    g.clearGroups();
+    g.applyMatrix4(rel.multiplyMatrices(inv, o.matrixWorld));
+    const key = o.material.uuid + (o.castShadow ? '|c' : '|n');
+    if (!buckets.has(key)) buckets.set(key, { mat: o.material, cast: o.castShadow, geos: [] });
+    buckets.get(key).geos.push(g);
+    gone.push(o);
+  });
+  for (const o of gone) o.parent.remove(o);
+  // empty helper groups can stay; they cost nothing to render
+  for (const { mat, cast, geos } of buckets.values()) {
+    const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+    if (geos.length > 1) geos.forEach((g) => g.dispose());
+    merged.userData.own = true;
+    const m = new THREE.Mesh(merged, mat);
+    m.castShadow = cast;
+    m.receiveShadow = true;
+    root.add(m);
+  }
+  return root;
+}
+
+let blobTex = null;
+/** A soft round shadow texture for scenery (cheaper than real shadows, works everywhere). */
+export function blobShadow(r, parent, sx = 1, sz = 1) {
+  if (!blobTex) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(0,0,0,0.38)');
+    g.addColorStop(0.6, 'rgba(0,0,0,0.18)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 64, 64);
+    blobTex = new THREE.CanvasTexture(c);
+    blobTex.userData.cached = true;
+  }
+  const m = mat('blob', () => new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false }));
+  const o = new THREE.Mesh(geo('blobPlane', () => new THREE.PlaneGeometry(1, 1)), m);
+  o.rotation.x = -Math.PI / 2;
+  o.scale.set(r * 2 * sx, r * 2 * sz, 1);
+  o.position.y = 0.015;
+  o.renderOrder = -1;
+  parent.add(o);
   return o;
 }
 
@@ -78,6 +149,7 @@ function patternTexture(p) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
+  t.userData.cached = true;
   patternTex.set(p, t);
   return t;
 }
@@ -95,18 +167,12 @@ function decal(parent, p, w, l, y, z = 0) {
 
 // ------------------------------------------------------------ vehicle parts ---
 
-function wheel(parent, x, y, z, r, w, list) {
-  const g = new THREE.Group();
-  g.position.set(x, y, z);
-  const t = mesh(cyl(r, r, w, 22), M.rubber(), 0, 0, 0, g);
+function wheel(parent, x, y, z, r, w) {
+  const t = mesh(cyl(r, r, w, 18), M.rubber(), x, y, z, parent);
   t.rotation.z = Math.PI / 2;
-  const hub = mesh(cyl(r * 0.55, r * 0.55, w + 0.01, 14), M.chrome(), 0, 0, 0, g);
+  const hub = mesh(cyl(r * 0.55, r * 0.55, w + 0.012, 12), M.chrome(), x, y, z, parent);
   hub.rotation.z = Math.PI / 2;
-  const spoke = mesh(new THREE.BoxGeometry(w + 0.02, r * 0.18, r * 0.9), M.dark(), 0, 0, 0, g);
-  void spoke;
-  parent.add(g);
-  list.push({ g, r });
-  return g;
+  hub.castShadow = false;
 }
 
 function lights(body, W, L, y, front = true, rear = true) {
@@ -118,6 +184,7 @@ function lightBar(body, y, z, a, b, list) {
   mesh(rbox(0.36, 0.04, 0.12, 0.02), M.dark(), 0, y, z, body);
   const ma = new THREE.MeshStandardMaterial({ color: a, emissive: a, emissiveIntensity: 0.4 });
   const mb = new THREE.MeshStandardMaterial({ color: b, emissive: b, emissiveIntensity: 0.4 });
+  ma.userData.own = mb.userData.own = true;
   const la = mesh(rbox(0.15, 0.07, 0.11, 0.03), ma, -0.09, y + 0.05, z, body);
   const lb = mesh(rbox(0.15, 0.07, 0.11, 0.03), mb, 0.09, y + 0.05, z, body);
   list.push(la, lb);
@@ -171,8 +238,10 @@ export function buildVehicle(v, opts = {}) {
     mesh(rbox(W * 0.8, 0.19, cl, 0.08), M.glass(), 0, 0.17 + h + 0.08, cz, body);
     mesh(rbox(W * 0.74, 0.05, cl * 0.78, 0.025), P(opt.roof ?? c), 0, 0.17 + h + 0.18, cz + cl * 0.04, body);
     mesh(rbox(W * 0.5, 0.05, 0.03, 0.01), M.dark(), 0, 0.22, -L / 2 - 0.005, body);
+    mesh(rbox(0.2, 0.07, 0.02, 0.01), M.matte(0xf4f4f0), 0, 0.24, L / 2 + 0.008, body);
+    for (const s of [-1, 1]) mesh(rbox(0.07, 0.05, 0.05, 0.015), P(c), s * (W / 2 + 0.03), 0.17 + h + 0.03, cz - cl / 2 + 0.04, body);
     lights(body, W, L, 0.27);
-    for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.035), 0.15, z, 0.15, 0.11, wheels);
+    for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.035), 0.15, z, 0.15, 0.11);
     eyeY = 0.17 + h + 0.1; eyeZ = cz - cl / 2 - 0.02;
     return 0.17 + h; // top of hood
   };
@@ -185,8 +254,9 @@ export function buildVehicle(v, opts = {}) {
     mesh(rbox(W * 0.86, 0.18, 0.08, 0.04), M.glass(), 0, 0.53, -L / 2 + 0.03, body);
     for (const s of [-1, 1]) mesh(rbox(0.04, 0.15, 0.3, 0.02), M.glass(), s * (W / 2 + 0.003), 0.52, cz - 0.05, body);
     mesh(rbox(W * 0.5, 0.08, 0.03, 0.01), M.chrome(), 0, 0.3, -L / 2 - 0.005, body);
+    for (const s of [-1, 1]) mesh(rbox(0.05, 0.14, 0.04, 0.015), M.dark(), s * (W / 2 + 0.035), 0.52, -L / 2 + 0.12, body);
     lights(body, W, L, 0.33, true, true);
-    for (const z of [-L / 2 + 0.38, L / 2 - 0.38, L / 2 - 0.82]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.04), 0.16, z, 0.16, 0.12, wheels);
+    for (const z of [-L / 2 + 0.38, L / 2 - 0.38, L / 2 - 0.82]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.04), 0.16, z, 0.16, 0.12);
     eyeY = 0.55; eyeZ = -L / 2 - 0.02;
     return { cargoZ: -L / 2 + cabL + 0.04 + (cargoLen ?? L - cabL - 0.04) / 2, cargoL: cargoLen ?? L - cabL - 0.04 };
   };
@@ -214,7 +284,7 @@ export function buildVehicle(v, opts = {}) {
       mesh(new THREE.BoxGeometry(0.3, 0.012, 0.1), M.matte(0xff3040), 0, 0.675, 0.15, body);
       lightBar(body, 0.68, -L * 0.3, 0xff2020, 0xff2020, sirens);
       lights(body, W, L, 0.3);
-      for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.035), 0.15, z, 0.15, 0.11, wheels);
+      for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.035), 0.15, z, 0.15, 0.11);
       eyeY = 0.53; eyeZ = -L / 2 - 0.03;
       break;
     }
@@ -227,7 +297,7 @@ export function buildVehicle(v, opts = {}) {
       for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), M.dark(), s * 0.22, 0.34, L / 2 - 0.1, body);
       mesh(rbox(W * 1.02, 0.04, 0.16, 0.02), P(col), 0, 0.43, L / 2 - 0.1, body);
       lights(body, W, L, 0.22);
-      for (const z of [-L * 0.32, L * 0.3]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.02), 0.14, z, 0.14, 0.15, wheels);
+      for (const z of [-L * 0.32, L * 0.3]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.02), 0.14, z, 0.14, 0.15);
       eyeY = 0.33; eyeZ = L * 0.05 - L * 0.16 - 0.02;
       break;
     }
@@ -242,7 +312,7 @@ export function buildVehicle(v, opts = {}) {
       const sp = mesh(cyl(0.15, 0.15, 0.1, 18), M.rubber(), 0, 0.36, L / 2 + 0.06, body);
       sp.rotation.x = Math.PI / 2;
       lights(body, W, L, 0.36);
-      for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.02), 0.17, z, 0.17, 0.13, wheels);
+      for (const z of [-L * 0.31, L * 0.31]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.02), 0.17, z, 0.17, 0.13);
       eyeY = 0.53; eyeZ = -L * 0.12 - 0.04;
       break;
     }
@@ -256,8 +326,8 @@ export function buildVehicle(v, opts = {}) {
       mesh(rbox(W * 0.78, 0.05, L * 0.44, 0.02), M.paint(g), 0, 0.77, L * 0.25, body);
       mesh(rbox(0.22, 0.18, 0.18, 0.05), M.matte(0x333333), 0, 0.45, L * 0.28, body);
       lights(body, 0.4, L, 0.38, true, false);
-      for (const s of [-1, 1]) wheel(body, s * 0.25, 0.13, -L * 0.33, 0.13, 0.1, wheels);
-      for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.02), 0.26, L * 0.25, 0.26, 0.16, wheels);
+      for (const s of [-1, 1]) wheel(body, s * 0.25, 0.13, -L * 0.33, 0.13, 0.1);
+      for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.02), 0.26, L * 0.25, 0.26, 0.16);
       eyeY = 0.42; eyeZ = -L / 2 - 0.02;
       break;
     }
@@ -277,7 +347,7 @@ export function buildVehicle(v, opts = {}) {
       for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.012, 0.03, L * 0.98), M.matte(0x1a1a1a), s * (W / 2 + 0.003), 0.4, 0, body);
       mesh(rbox(W * 0.7, 0.03, L * 0.8, 0.015), M.matte(0xf3f3f3), 0, 0.75, 0, body);
       lights(body, W, L, 0.3);
-      for (const z of [-L / 2 + 0.4, L / 2 - 0.45]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.04), 0.16, z, 0.16, 0.12, wheels);
+      for (const z of [-L / 2 + 0.4, L / 2 - 0.45]) for (const s of [-1, 1]) wheel(body, s * (W / 2 - 0.04), 0.16, z, 0.16, 0.12);
       eyeY = 0.56; eyeZ = -L / 2 - 0.03;
       break;
     }
@@ -351,6 +421,7 @@ export function buildVehicle(v, opts = {}) {
 
   let eyeGroup = null;
   if (opts.faces) eyeGroup = eyes(body, eyeY, eyeZ);
+  if (opts.merge !== false) mergeStatic(body, [...sirens, drum && drum.parent]);
 
   root.userData = { body, wheels, sirens, drum, eyes: eyeGroup, len, L };
   root.traverse((o) => { o.userData.vroot = root; });
@@ -395,7 +466,7 @@ export function buildObstacle(type) {
     mesh(cyl(0.17, 0.17, 0.02, 16), M.matte(0x222222), 0, 0.95, 0, g);
     mesh(torus(0.15, 0.035), M.matte(0xe63946), 0, 0.74, 0, g).rotation.x = Math.PI / 2;
   }
-  return g;
+  return mergeStatic(g);
 }
 
 // ------------------------------------------------------------ pets ---
@@ -461,6 +532,7 @@ export function buildPet(type) {
       break;
     }
   }
+  mergeStatic(body);
   g.userData.body = body;
   g.traverse((o) => { o.userData.proot = g; });
   return g;
@@ -471,6 +543,8 @@ export function buildPet(type) {
 export function buildDeco(type, rand) {
   const g = new THREE.Group();
   const r = () => rand();
+  const big = { house: 1, building: 1, barn: 1 }[type];
+  if (type !== 'flowers' && type !== 'lamp') blobShadow(big ? 1.1 : type === 'fence' ? 0.55 : 0.42, g, 1, type === 'fence' ? 0.4 : 1);
   switch (type) {
     case 'tree': {
       const s = 0.8 + r() * 0.6;
@@ -551,5 +625,6 @@ export function buildDeco(type, rand) {
       break;
     }
   }
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   return g;
 }

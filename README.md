@@ -32,6 +32,11 @@ to four bumps, and 1 star otherwise. The 💡 button shows a vehicle that can le
   - 🌙 **Night City**
 - **Every level can be solved.** The generator builds each lot so it can be cleared, and
   tunes how long the "this one first" chains get.
+- **Game feel:**
+  - Vehicles bounce into the lot at the start of each level.
+  - A red "!" marks whatever a car bumped into.
+  - A live 3-star meter in the HUD drops as you bump.
+  - Traffic drives around the home screen.
 - **Daily Puzzle:** a new hard lot every day, plus a streak counter.
 - **Unlocks:** presents along the way unlock 11 vehicles and 8 paint jobs (polka dots,
   flames, rainbow, gold, crowns…), which then start appearing in levels.
@@ -86,7 +91,7 @@ js/game.js            3D board: camera framing, input/raycasting, driving & bump
 js/models.js          procedural 3D vehicles, animals, obstacles and scenery
 js/studio.js          turntable renderer for garage thumbnails and unlock reveals
 js/draw.js            2D overlay helpers (hint hand, particle shapes)
-vendor/               three.js r160 (MIT) + RoundedBoxGeometry + RoomEnvironment
+vendor/               three.js r160 (MIT) + RoundedBoxGeometry, RoomEnvironment, BufferGeometryUtils
 fonts/                Rubik (OFL)
 js/audio.js           Web Audio synthesized sound effects, music and spoken cheers
 js/generator.js       level generator + solver (shared by browser and build script)

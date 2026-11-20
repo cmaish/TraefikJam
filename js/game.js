@@ -2,7 +2,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { DX, DY, isHoriz, vehicleCells, rayCells, rotateLevel, makeRng } from './generator.js';
-import { buildVehicle, buildObstacle, buildPet, buildDeco, M, rbox } from './models.js';
+import { buildVehicle, buildObstacle, buildPet, buildDeco, mergeStatic, M, rbox } from './models.js';
 import { FX } from './fx.js';
 import { drawHand } from './draw.js';
 import { KINDS } from './vehicles.js';
@@ -19,6 +19,41 @@ const THEMES = {
 const ROAD_OFF = 0.85; // lot edge -> road centre
 const ROAD_W = 1.0;
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
+const bounce = (t) => {
+  const n = 7.5625, d = 2.75;
+  if (t < 1 / d) return n * t * t;
+  if (t < 2 / d) return n * (t -= 1.5 / d) * t + 0.75;
+  if (t < 2.5 / d) return n * (t -= 2.25 / d) * t + 0.9375;
+  return n * (t -= 2.625 / d) * t + 0.984375;
+};
+const groundTex = new Map();
+function groundTexture(color, grassy) {
+  const key = color + '|' + grassy;
+  if (groundTex.has(key)) return groundTex.get(key);
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  const base = new THREE.Color(color);
+  x.fillStyle = '#' + base.getHexString();
+  x.fillRect(0, 0, 256, 256);
+  const rand = makeRng(color);
+  for (let i = 0; i < 2600; i++) {
+    const k = (rand() - 0.5) * 0.16;
+    const col = base.clone().offsetHSL(0, 0, k);
+    x.fillStyle = '#' + col.getHexString();
+    const px = rand() * 256, py = rand() * 256;
+    if (grassy && rand() < 0.6) { x.fillRect(px, py, 1.5, 4 + rand() * 4); }
+    else { x.beginPath(); x.arc(px, py, 1 + rand() * 2.5, 0, 7); x.fill(); }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(36, 36);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  t.userData.cached = true;
+  groundTex.set(key, t);
+  return t;
+}
 const yawOf = (dir) => (-dir * Math.PI) / 2;
 
 export class Game {
@@ -76,7 +111,7 @@ export class Game {
     this.level = { ...level, world: undefined };
     this.levelN = level.n;
     this.vehicles = level.vehicles.map((v) => ({ ...v, state: 'idle', off: 0, vel: 0, s: 0, squish: 0, wiggle: 0, hop: 0 }));
-    this.pets = level.pets.map((p) => ({ ...p, state: 'idle', t: 0, phase: Math.random() * 6 }));
+    this.pets = level.pets.map((p) => ({ ...p, state: 'idle', t: 0, phase: Math.random() * 6, intro: 1 }));
     this.obstacles = level.obstacles.map((o) => ({ ...o }));
     this.total = this.vehicles.length;
     this.exited = 0;
@@ -90,7 +125,20 @@ export class Game {
     this.shake = 0;
     this.orbit = 0;
     this._z = 0;
+    this.blockT = 0;
     this._forceFrames = 3;
+    // vehicles drop into the lot, rippling out from the centre
+    const animateIn = mode === 'play' && !this.settings.reduceMotion;
+    let maxDelay = 0;
+    const cx = level.w / 2, cy = level.h / 2;
+    for (const it of [...this.vehicles, ...this.pets]) {
+      const d = Math.hypot(it.x + 0.5 - cx, it.y + 0.5 - cy);
+      const delay = animateIn ? 0.05 + d * 0.045 : 0;
+      it.intro = animateIn ? -delay : 1;
+      maxDelay = Math.max(maxDelay, delay);
+    }
+    this.introLeft = animateIn ? maxDelay + 0.45 : 0;
+    if (animateIn) setTimeout(() => this.hooks.sfx.whoosh?.(), 60);
     this._idleFrames = 0;
     this._measure();
     if (this._wantsRotate()) this._rotateLogic();
@@ -129,7 +177,17 @@ export class Game {
     this.hint = null;
   }
 
+  /** Remove everything from a group and free the GPU memory that isn't shared/cached. */
   _clear(group) {
+    group.traverse((o) => {
+      if (o.geometry && !o.geometry.userData.cached) o.geometry.dispose();
+      const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of ms) {
+        if (m.userData.cached) continue;
+        if (m.map && !m.map.userData.cached) m.map.dispose();
+        m.dispose();
+      }
+    });
     for (let i = group.children.length - 1; i >= 0; i--) group.remove(group.children[i]);
   }
 
@@ -151,7 +209,8 @@ export class Game {
     const rand = makeRng((this.levelN || 1) * 97 + 3);
 
     // ground
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), new THREE.MeshStandardMaterial({ color: th.ground, roughness: 1, envMapIntensity: 0.25 }));
+    const grassy = ['sunny', 'forest', 'farm'].includes(L.theme);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), new THREE.MeshStandardMaterial({ map: groundTexture(th.ground, grassy), roughness: 1, envMapIntensity: 0.25 }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.world.add(ground);
@@ -220,6 +279,7 @@ export class Game {
     const R = Math.max(L.w, L.h) + 9;
     let placed = 0;
     const spots = [];
+    const decoRoot = new THREE.Group();
     for (let i = 0; i < 400 && placed < 70; i++) {
       const x = (rand() * 2 - 1) * R, z = (rand() * 2 - 1) * R;
       const ax = Math.abs(x), az = Math.abs(z);
@@ -238,7 +298,7 @@ export class Game {
         // face the nearest road
         d.rotation.y = ax - clearX > az - clearZ ? (x > 0 ? -Math.PI / 2 : Math.PI / 2) : (z > 0 ? Math.PI : 0);
       } else d.rotation.y = rand() * Math.PI * 2;
-      this.world.add(d);
+      decoRoot.add(d);
       placed++;
     }
     if (th.night) {
@@ -247,7 +307,7 @@ export class Game {
         const l = buildDeco('lamp', rand);
         l.position.set(x, 0, z);
         l.rotation.y = ry;
-        this.world.add(l);
+        decoRoot.add(l);
       }
       for (const [x, z] of [[-hw * 0.6, -hh * 0.6], [hw * 0.6, hh * 0.6], [hw * 0.6, -hh * 0.6], [-hw * 0.6, hh * 0.6]]) {
         const pl = new THREE.PointLight(0xffd99a, 6, Math.max(L.w, L.h) * 0.9, 1.6);
@@ -255,6 +315,8 @@ export class Game {
         this.world.add(pl);
       }
     }
+
+    this.world.add(mergeStatic(decoRoot));
 
     // obstacles
     for (const o of this.obstacles) {
@@ -296,6 +358,30 @@ export class Game {
     this.hintMesh = new THREE.Mesh(rbox(1, 0.02, 1, 0.009, 2), new THREE.MeshBasicMaterial({ color: 0xfff27a, transparent: true, opacity: 0.6, depthWrite: false }));
     this.hintMesh.visible = false;
     this.board.add(this.hintMesh);
+    this.blockMesh = new THREE.Mesh(rbox(1, 0.02, 1, 0.009, 2), new THREE.MeshBasicMaterial({ color: 0xff3b4e, transparent: true, opacity: 0, depthWrite: false }));
+    this.blockMesh.visible = false;
+    this.board.add(this.blockMesh);
+
+    // a little traffic on the roads behind the home screen
+    this.traffic = [];
+    if (this.mode === 'show') {
+      const pool = this.vehicles.filter((v) => v.kind).map((v) => v.kind);
+      const kinds = pool.length > 3 ? pool : ['car', 'car', 'truck', ...pool];
+      const lanes = [
+        { axis: 'x', c: -(hh + ROAD_OFF) + 0.24, dir: 1 }, { axis: 'x', c: hh + ROAD_OFF - 0.24, dir: 3 },
+        { axis: 'z', c: hw + ROAD_OFF + 0.24, dir: 0 }, { axis: 'z', c: -(hw + ROAD_OFF) - 0.24, dir: 2 },
+        { axis: 'x', c: hh + ROAD_OFF + 0.24, dir: 1 }, { axis: 'z', c: -(hw + ROAD_OFF) + 0.24, dir: 0 },
+      ];
+      lanes.forEach((ln, i) => {
+        const kind = kinds[Math.floor(rand() * kinds.length)];
+        const len = kind && ['truck', 'bus', 'firetruck', 'icecream', 'garbage', 'mixer'].includes(kind) ? 3 : 2;
+        const colors = ['#ff5a5f', '#ff9f1c', '#ffd23f', '#3ccf6e', '#2ec4b6', '#3a86ff', '#9b5de5', '#f15bb5'];
+        const m = buildVehicle({ kind, len, color: colors[Math.floor(rand() * colors.length)] }, { faces });
+        m.rotation.y = yawOf(ln.dir);
+        this.world.add(m);
+        this.traffic.push({ m, ...ln, pos: -24 + i * 9 + rand() * 4, speed: 1.6 + rand() * 1.2 });
+      });
+    }
 
     // snow
     this.snow = null;
@@ -369,6 +455,7 @@ export class Game {
     x.fillStyle = g;
     x.beginPath(); x.moveTo(20, 128); x.lineTo(44, 128); x.lineTo(64, 0); x.lineTo(0, 0); x.fill();
     const t = new THREE.CanvasTexture(c);
+    t.userData.cached = true;
     return t;
   }
 
@@ -575,6 +662,7 @@ export class Game {
   }
 
   tapAt(px, py) {
+    if (this.introLeft > 0.2) return;
     const hit = this._hit(px, py);
     this.idle = 0;
     this.hint = null;
@@ -652,7 +740,7 @@ export class Game {
 
   _needsRender() {
     if (this.mode === 'show' || this._forceFrames > 0) { this._forceFrames--; return true; }
-    if (this.hint || this.shake > 0 || this.fx.p.length || this.snow) return true;
+    if (this.hint || this.shake > 0 || this.fx.p.length || this.snow || this.introLeft > 0 || this.blockT > 0) return true;
     if (this.pets.some((p) => p.state !== 'gone')) return true;
     return this.vehicles.some((v) => v.state === 'exit' || v.state === 'bump' || v.squish > 0 || v.wiggle > 0 || v.hop > 0)
       || this.obstacles.some((o) => o.wob > 0);
@@ -728,6 +816,7 @@ export class Game {
             if (b.kind === 'vehicle') b.obj.wiggle = 1;
             if (b.kind === 'pet') b.obj.t = 0, b.obj.jolt = 1;
             if (b.kind === 'obstacle' && b.obj.mesh) b.obj.wob = 1;
+            this._flashBlocker(b);
             this.hooks.sfx.bump();
             this.hooks.haptic?.([20, 30, 20]);
             if (!this.settings.reduceMotion) this.shake = 0.18;
@@ -744,6 +833,12 @@ export class Game {
         }
       }
       this._placeVehicle(v);
+      if (v.intro < 0.5) {
+        v.intro += dt;
+        m.visible = v.intro >= 0;
+        const k = Math.max(0, Math.min(1, v.intro / 0.42));
+        m.position.y = (1 - bounce(k)) * 1.6;
+      }
       // body motion
       const body = ud.body;
       const sq = Math.sin(v.squish * Math.PI) * 0.07;
@@ -766,6 +861,11 @@ export class Game {
       if (!p.mesh || p.state === 'gone') continue;
       p.t += dt;
       const body = p.mesh.userData.body;
+      if (p.intro < 0.5) {
+        p.intro += dt;
+        p.mesh.visible = p.intro >= 0;
+        p.mesh.position.y = 0.012 + (1 - bounce(Math.max(0, Math.min(1, p.intro / 0.42)))) * 1.6;
+      }
       if (p.state === 'idle') {
         body.position.y = Math.abs(Math.sin(t * 3 + p.phase)) * 0.04;
         body.rotation.y = Math.sin(t * 0.8 + p.phase) * 0.5;
@@ -784,6 +884,19 @@ export class Game {
     }
     this.fx.update(dt);
     if (this.shake > 0) this.shake -= dt;
+    if (this.introLeft > 0) this.introLeft -= dt;
+    if (this.blockT > 0) {
+      this.blockT -= dt;
+      this.blockMesh.visible = this.blockT > 0;
+      this.blockMesh.material.opacity = Math.max(0, this.blockT / 0.7) * 0.75 * (0.6 + 0.4 * Math.sin(t * 30));
+    }
+    for (const tr of this.traffic || []) {
+      tr.pos += tr.speed * dt;
+      if (tr.pos > 26) tr.pos = -26;
+      const s = tr.dir === 1 || tr.dir === 2 ? tr.pos : -tr.pos;
+      if (tr.axis === 'x') tr.m.position.set(s, 0, tr.c);
+      else tr.m.position.set(tr.c, 0, s);
+    }
     if (this.snow) {
       const a = this.snow.geometry.attributes.position;
       for (let i = 0; i < a.count; i++) {
@@ -862,6 +975,25 @@ export class Game {
       const unit = this._screen(p.x + 1, 0.5, p.z)[0] - s[0];
       drawHand(c, s[0], s[1], Math.max(36, Math.abs(unit) * 1.1), this.time);
     }
+  }
+
+  _flashBlocker(b) {
+    const L = this.level;
+    const bm = this.blockMesh;
+    if (b.kind === 'vehicle') {
+      const v = b.obj;
+      const [cx, cz] = this._centerOf(v);
+      const horiz = isHoriz(v.dir);
+      bm.position.set(cx, 0.025, cz);
+      bm.scale.set((horiz ? v.len : 1) + 0.12, 1, (horiz ? 1 : v.len) + 0.12);
+    } else {
+      bm.position.set(b.obj.x + 0.5 - L.w / 2, 0.025, b.obj.y + 0.5 - L.h / 2);
+      bm.scale.set(1.12, 1, 1.12);
+    }
+    this.blockT = 0.7;
+    const [sx, sy] = this._screen(bm.position.x, 0.9, bm.position.z);
+    const unit = Math.abs(this._screen(bm.position.x + 1, 0.9, bm.position.z)[0] - sx);
+    this.fx.bang(sx, sy, Math.max(26, unit * 0.62));
   }
 
   celebrate() {

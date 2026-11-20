@@ -35,6 +35,12 @@
     </defs>
   </svg>
 
+  <div id="splash">
+    <div class="logo splash-logo" aria-label="Beep Beep Jam"><span class="logo-small">Beep Beep</span><span class="logo-big">JAM</span></div>
+    <div class="splash-road"><i></i></div>
+    <div class="splash-msg" id="splash-msg">Warming up the engines…</div>
+  </div>
+
   <div id="stage">
     <canvas id="board"></canvas>
     <canvas id="fx"></canvas>
@@ -92,7 +98,8 @@
         <div class="hud-mid">
           <div class="hud-title" id="level-tag">Level 1</div>
           <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
-          <div class="hud-count" id="hud-count">0 / 0</div>
+          <div class="hud-count" id="hud-count">0 left</div>
+          <div class="hud-stars" id="hud-stars" aria-label="Stars you're on track for"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
         </div>
         <button id="btn-hint" class="icon-btn hint-btn" aria-label="Hint"><svg><use href="#i-bulb"/></svg></button>
         <button id="btn-restart" class="icon-btn" aria-label="Restart level"><svg><use href="#i-redo"/></svg></button>
