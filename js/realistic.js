@@ -32,7 +32,9 @@ export function loadRealistic() {
   if (loading) return loading;
   const loader = new GLTFLoader();
   const names = [...new Set(Object.values(REAL).flat())];
-  loading = Promise.all(names.map((n) => loader.loadAsync(`${BASE}${n}.glb`).then((gltf) => templates.set(n, prepare(gltf.scene)))))
+  // .glb normally; some hosts (e.g. embedded previews) only serve plain-JSON glTF, so fall back to that
+  const load = (n) => loader.loadAsync(`${BASE}${n}.glb`).catch(() => loader.loadAsync(`${BASE}${n}.gltf.json`));
+  loading = Promise.all(names.map((n) => load(n).then((gltf) => templates.set(n, prepare(gltf.scene)))))
     .catch((err) => { loading = null; templates.clear(); throw err; });
   return loading;
 }
