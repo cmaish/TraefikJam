@@ -9,7 +9,7 @@ import * as studio from './studio.js';
 import { loadRealistic, realisticReady, REAL, REAL_FILES } from './realistic.js';
 
 const $ = (s) => document.querySelector(s);
-const VERSION = '3.0.0';
+const VERSION = '3.0.1';
 
 // ------------------------------------------------------------ helpers ---
 

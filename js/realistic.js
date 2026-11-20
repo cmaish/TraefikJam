@@ -27,14 +27,37 @@ let loading = null;
 
 export const realisticReady = () => templates.size > 0;
 
+const isGlb = (buf) => buf && buf.byteLength > 12 && new TextDecoder().decode(new Uint8Array(buf, 0, 4)) === 'glTF';
+
+/**
+ * Fetch one model as GLB bytes. Normally that's the .glb file; hosts that only serve text
+ * (e.g. embedded previews with a strict content policy) get a base64 copy in a .glb.txt file,
+ * decoded here so nothing needs a data: URL fetch.
+ */
+async function fetchModel(n) {
+  try {
+    const r = await fetch(`${BASE}${n}.glb`);
+    if (r.ok) {
+      const buf = await r.arrayBuffer();
+      if (isGlb(buf)) return buf;
+    }
+  } catch { /* fall through to the text copy */ }
+  const r = await fetch(`${BASE}${n}.glb.txt`);
+  if (!r.ok) throw new Error(`model ${n} not found`);
+  const bin = atob((await r.text()).trim());
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  if (!isGlb(bytes.buffer)) throw new Error(`model ${n} is not a GLB`);
+  return bytes.buffer;
+}
+
 /** Load all realistic models (once). Resolves when ready; rejects if they can't be fetched. */
 export function loadRealistic() {
   if (loading) return loading;
   const loader = new GLTFLoader();
   const names = [...new Set(Object.values(REAL).flat())];
-  // .glb normally; some hosts (e.g. embedded previews) only serve plain-JSON glTF, so fall back to that
-  const load = (n) => loader.loadAsync(`${BASE}${n}.glb`).catch(() => loader.loadAsync(`${BASE}${n}.gltf.json`));
-  loading = Promise.all(names.map((n) => load(n).then((gltf) => templates.set(n, prepare(gltf.scene)))))
+  const parse = (buf) => new Promise((res, rej) => loader.parse(buf, BASE, res, rej));
+  loading = Promise.all(names.map((n) => fetchModel(n).then(parse).then((gltf) => templates.set(n, prepare(gltf.scene)))))
     .catch((err) => { loading = null; templates.clear(); throw err; });
   return loading;
 }
