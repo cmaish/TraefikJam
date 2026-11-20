@@ -16,7 +16,15 @@ const THEMES = {
   night: { sky: 0x10162e, ground: 0x253050, lot: '#353b56', line: 'rgba(255,215,122,0.8)', curb: 0x59628e, hemi: [0x5a6aa8, 0x101830, 0.55], sun: [0x9fb4ff, 0.7], deco: ['building', 'building', 'lamp', 'building'], night: true },
 };
 
-const ROAD_OFF = 0.85; // lot edge -> road centre
+const ROAD_OFF = 0.85;
+// Flat ground layers are painted in this order with depth writes off, so overlapping
+// planes (crossing roads, sidewalks, lane dashes, the lot) never z-fight at any distance.
+const LAYER = { ground: -10, sidewalk: -9, road: -8, dash: -7, lot: -6 };
+function layer(mesh, order) {
+  mesh.renderOrder = order;
+  mesh.material.depthWrite = false;
+  return mesh;
+} // lot edge -> road centre
 const ROAD_W = 1.0;
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
 const bounce = (t) => {
@@ -27,8 +35,8 @@ const bounce = (t) => {
   return n * (t -= 2.625 / d) * t + 0.984375;
 };
 const groundTex = new Map();
-function groundTexture(color, grassy) {
-  const key = color + '|' + grassy;
+function groundTexture(color, grassy, amp = 0.16) {
+  const key = color + '|' + grassy + '|' + amp;
   if (groundTex.has(key)) return groundTex.get(key);
   const c = document.createElement('canvas');
   c.width = c.height = 256;
@@ -38,7 +46,7 @@ function groundTexture(color, grassy) {
   x.fillRect(0, 0, 256, 256);
   const rand = makeRng(color);
   for (let i = 0; i < 2600; i++) {
-    const k = (rand() - 0.5) * 0.16;
+    const k = (rand() - 0.5) * amp;
     const col = base.clone().offsetHSL(0, 0, k);
     x.fillStyle = '#' + col.getHexString();
     const px = rand() * 256, py = rand() * 256;
@@ -210,15 +218,16 @@ export class Game {
 
     // ground
     const grassy = ['sunny', 'forest', 'farm'].includes(L.theme);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), new THREE.MeshStandardMaterial({ map: groundTexture(th.ground, grassy), roughness: 1, envMapIntensity: 0.25 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), new THREE.MeshStandardMaterial({ map: groundTexture(th.ground, grassy, th.night ? 0.035 : L.theme === 'snow' ? 0.06 : 0.16), roughness: 1, envMapIntensity: 0.25 }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
+    layer(ground, LAYER.ground);
     this.world.add(ground);
 
     // roads (two horizontal, two vertical) with lane dashes
     const roadMat = new THREE.MeshStandardMaterial({ color: th.night ? 0x2b2f3d : 0x4a4f5c, roughness: 0.92, envMapIntensity: 0.25 });
     const sideMat = new THREE.MeshStandardMaterial({ color: th.curb, roughness: 0.8, envMapIntensity: 0.3 });
-    const dashMat = M.matte(th.night ? 0xffd77a : 0xffffff);
+    const dashMat = new THREE.MeshStandardMaterial({ color: th.night ? 0xffd77a : 0xffffff, roughness: 0.75, envMapIntensity: 0.4 });
     const dashes = [];
     const addRoad = (horiz, c, y) => {
       const g = new THREE.PlaneGeometry(horiz ? 140 : ROAD_W, horiz ? ROAD_W : 140);
@@ -226,6 +235,7 @@ export class Game {
       m.rotation.x = -Math.PI / 2;
       m.position.set(horiz ? 0 : c, y, horiz ? c : 0);
       m.receiveShadow = true;
+      layer(m, LAYER.road);
       this.world.add(m);
       for (let t = -40; t < 40; t += 0.8) {
         const nearCross = horiz ? Math.abs(Math.abs(t) - (hw + ROAD_OFF)) < 0.8 : Math.abs(Math.abs(t) - (hh + ROAD_OFF)) < 0.8;
@@ -238,6 +248,7 @@ export class Game {
         const off = c + s * (ROAD_W / 2 + 0.175);
         sw.position.set(horiz ? 0 : off, y - 0.001, horiz ? off : 0);
         sw.receiveShadow = true;
+        layer(sw, LAYER.sidewalk);
         this.world.add(sw);
       }
     };
@@ -254,6 +265,7 @@ export class Game {
       mtx.compose(new THREE.Vector3(x, 0.01, z), q, new THREE.Vector3(1, 1, 1));
       im.setMatrixAt(i, mtx);
     });
+    layer(im, LAYER.dash);
     this.world.add(im);
 
     // lot surface with painted bays
@@ -262,6 +274,7 @@ export class Game {
     lot.rotation.x = -Math.PI / 2;
     lot.position.y = 0.012;
     lot.receiveShadow = true;
+    layer(lot, LAYER.lot);
     this.world.add(lot);
     // curb around the lot
     const curbM = new THREE.MeshStandardMaterial({ color: th.curb, roughness: 0.7, envMapIntensity: 0.3 });
