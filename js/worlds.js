@@ -7,32 +7,32 @@ export const WORLDS = [
   {
     id: 'sunny', name: 'Sunny Town', icon: '☀️',
     obstacle: 'bush', pets: [],
-    grid: [[3, 4], [5, 6]], fill: [0.45, 0.8], truck: [0, 0], obstacles: [0, 0], petCount: [0, 0], hard: [0, 0.35],
+    grid: [[3, 4], [5, 7]], fill: [0.5, 0.8], truck: [0, 0.15], obstacles: [0, 0], petCount: [0, 0], hard: [0, 0.5],
   },
   {
     id: 'trucks', name: 'Truck Stop', icon: '🚚',
     obstacle: 'cone', pets: [],
-    grid: [[5, 5], [6, 7]], fill: [0.6, 0.82], truck: [0.3, 0.4], obstacles: [0, 1], petCount: [0, 0], hard: [0.25, 0.55],
+    grid: [[5, 6], [6, 8]], fill: [0.65, 0.82], truck: [0.3, 0.4], obstacles: [0, 2], petCount: [0, 0], hard: [0.4, 0.7],
   },
   {
     id: 'forest', name: 'Forest Park', icon: '🌲',
     obstacle: 'tree', pets: ['bunny'],
-    grid: [[5, 6], [6, 8]], fill: [0.65, 0.82], truck: [0.3, 0.35], obstacles: [2, 4], petCount: [0, 1], hard: [0.4, 0.7],
+    grid: [[6, 7], [7, 9]], fill: [0.7, 0.84], truck: [0.3, 0.35], obstacles: [2, 4], petCount: [0, 1], hard: [0.55, 0.8],
   },
   {
     id: 'farm', name: 'Farm Friends', icon: '🐥',
     obstacle: 'hay', pets: ['duck', 'pig', 'chick', 'puppy'],
-    grid: [[6, 7], [6, 8]], fill: [0.68, 0.84], truck: [0.3, 0.35], obstacles: [1, 3], petCount: [1, 3], hard: [0.5, 0.8],
+    grid: [[6, 8], [7, 9]], fill: [0.72, 0.85], truck: [0.3, 0.35], obstacles: [1, 3], petCount: [1, 3], hard: [0.65, 0.88],
   },
   {
     id: 'snow', name: 'Snowy Hills', icon: '❄️',
     obstacle: 'snowman', pets: ['penguin', 'bunny'],
-    grid: [[6, 8], [7, 9]], fill: [0.7, 0.85], truck: [0.3, 0.4], obstacles: [2, 4], petCount: [0, 2], hard: [0.6, 0.9],
+    grid: [[7, 8], [8, 10]], fill: [0.74, 0.86], truck: [0.3, 0.4], obstacles: [2, 4], petCount: [0, 2], hard: [0.75, 0.95],
   },
   {
     id: 'night', name: 'Night City', icon: '🌙',
     obstacle: 'cone', pets: ['kitty', 'puppy'],
-    grid: [[7, 8], [7, 9]], fill: [0.72, 0.86], truck: [0.35, 0.4], obstacles: [2, 4], petCount: [1, 2], hard: [0.7, 1],
+    grid: [[7, 9], [8, 10]], fill: [0.76, 0.87], truck: [0.35, 0.4], obstacles: [2, 4], petCount: [1, 2], hard: [0.85, 1],
   },
 ];
 

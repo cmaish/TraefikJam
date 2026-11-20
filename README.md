@@ -1,65 +1,60 @@
 # Beep Beep Jam 🚗
 
-A gentle, **ad-free** "drive the cars out of the parking lot" puzzle for toddlers and
-little kids. It's an installable PWA that works **fully offline**, with no tracking, no
-accounts and no purchases. Everything (art, sounds, music, levels) is made in code, so the
-whole app is under 500 KB.
+An **ad-free 3D parking-lot puzzle**: tap the cars to drive them out of a packed lot in the
+right order. It's an installable PWA that works **fully offline**, with no tracking, no
+accounts and no purchases. All art, sounds and music are generated in code (three.js is
+bundled in `vendor/`).
 
 ## How to play
 
-Every vehicle has a face and looks the way it will drive. **Tap a vehicle** and it drives
-that way.
-- If the road ahead is clear, it zooms out of the lot (vroom, honk, sparkles).
-- If something is in the way, it bumps gently and rolls back. You can't lose and there are
-  no timers.
-- Clear the whole lot to win stars and confetti.
+Each vehicle can only drive the way it's facing. **Tap a vehicle**:
+- If its way is clear, it pulls out onto the road around the lot and drives off.
+- If something is in the way, it bumps into it and rolls back.
 
-The first levels have a helping hand that shows what to tap. Later on, the hand shows up
-again after a pause (grown-ups can change or turn off this delay).
+Clear the lot to finish the level. You earn 3 stars with at most one bump, 2 stars with up
+to four bumps, and 1 star otherwise. The 💡 button shows a vehicle that can leave right now.
 
 ## What's inside
 
-- **120 hand-tuned campaign levels in 6 worlds**, then endless **Bonus Lots**:
-  - ☀️ **Sunny Town:** first steps, small lots.
-  - 🚚 **Truck Stop:** long 3-cell trucks.
-  - 🌲 **Forest Park:** trees and bushes that never move.
-  - 🐥 **Farm Friends:** ducks, piglets, chicks and puppies sit in the way. Tap them and they
-    hop off with a quack, oink or woof.
-  - ❄️ **Snowy Hills:** snowmen, penguins and falling snow.
-  - 🌙 **Night City:** glowing headlights and the biggest lots.
-- **Difficulty that ramps up slowly:** lots get bigger, more vehicles appear, and longer
-  "this one first, then that one" chains build up. Every 5th level is a breather, and every
-  10th is a bigger "boss" lot.
+- **3D graphics:**
+  - Glossy toy-style vehicles with reflections, soft shadows, rolling wheels and flashing
+    sirens.
+  - A road loop around every lot, which vehicles turn onto as they leave.
+  - Themed scenery with houses, trees, cacti, a barn, snowy pines, a night city with
+    headlights and street lamps, and falling snow.
+- **120 campaign levels in 6 worlds**, with lots growing up to 8×10 and around 30
+  vehicles, then endless **Bonus Lots**:
+  - ☀️ **Sunny Town**
+  - 🚚 **Truck Stop:** long trucks.
+  - 🌲 **Forest Park:** trees that never move.
+  - 🐥 **Farm Friends:** animals sit in the way until you tap them.
+  - ❄️ **Snowy Hills**
+  - 🌙 **Night City**
 - **Every level can be solved.** The generator builds each lot so it can be cleared, and
-  the build script checks this for every campaign level.
-- **Surprise presents:** every few levels a gift box unlocks a new vehicle or paint job:
-  - Vehicles: taxi, police car, race car, school bus, fire truck, ambulance, ice cream
-    truck, tractor, garbage truck, jeep and cement mixer.
-  - Paint jobs: polka dots, stripes, hearts, stars, flames, rainbow, gold and crowns.
-
-  New items start appearing in the levels right away.
-- **Garage:** tap any vehicle you've collected to hear its sound (siren, jingle, chug…) and
-  its name.
-- **Home screen toy:** the cars driving along the road honk and hop when tapped.
+  tunes how long the "this one first" chains get.
+- **Daily Puzzle:** a new hard lot every day, plus a streak counter.
+- **Unlocks:** presents along the way unlock 11 vehicles and 8 paint jobs (polka dots,
+  flames, rainbow, gold, crowns…), which then start appearing in levels.
+- **Garage:** view your collection on a 3D turntable.
+- **Win screen:** stars, moves, bumps and time for each level.
+- **Pause menu:** resume, restart, levels, settings or home.
 - Landscape and portrait both work, and the lot turns to fit the screen.
 
-## Grown-ups area
+## Settings
 
-**Press and hold the ⚙️ gear** on the home screen (about 2 seconds), then answer a simple sum.
-In the grown-ups area you can:
-
-- See progress: furthest level, levels completed, stars, vehicles cleared, time played
-  today and in total, and the next surprise.
-- Change sound: effects and music (each with volume), spoken cheers and vibration.
-- Change play:
-  - Helping-hand delay (off / 4s / 8s / 15s).
-  - Car speed (slow / normal / fast).
-  - Stars: "always 3" (gentle, the default) or "count bumps".
-  - Calmer effects and hiding level numbers.
-- Set a **session time limit** (10–60 min). When time is up, a sleepy "time for a rest"
-  screen appears, and only a grown-up can continue.
-- **Unlock all levels**, **unlock all vehicles**, or **jump to any level**.
-- **Reset progress** or **reset settings**.
+Tap **Settings** on the home screen, or in the pause menu. It covers:
+- **Progress:** levels and stars, time played today and in total, and the next unlock.
+- **Sound:** effects and music (each with volume), spoken cheers and vibration.
+- **Kid mode:** cartoon faces, always 3 stars, slower cars, automatic hints and spoken
+  cheers, all in one switch. Each of these can also be set on its own.
+- **Gameplay:** automatic hint delay, car speed, star rules, calmer effects and level
+  numbers.
+- **Parental controls:**
+  - **Lock settings:** a quick sum has to be answered before settings open.
+  - **Play-time limit:** after 10–60 minutes, a "time for a rest" screen appears that only
+    a grown-up can dismiss.
+- **Levels & garage:** unlock all levels, unlock all vehicles, or jump to any level.
+- **Reset:** progress or settings. Tap the button twice to confirm.
 
 All data stays on the device in `localStorage`.
 
@@ -87,14 +82,18 @@ pinning (Android) keeps little hands inside the game.
 index.html            screens + overlays
 css/style.css         UI styling
 js/main.js            app controller (screens, win flow, rewards, garage, play-time limit)
-js/game.js            board engine: input, driving/bump animation, hints, rendering
-js/draw.js            all vehicle / animal / obstacle artwork (canvas)
+js/game.js            3D board: camera framing, input/raycasting, driving & bump animation, hints
+js/models.js          procedural 3D vehicles, animals, obstacles and scenery
+js/studio.js          turntable renderer for garage thumbnails and unlock reveals
+js/draw.js            2D overlay helpers (hint hand, particle shapes)
+vendor/               three.js r160 (MIT) + RoundedBoxGeometry + RoomEnvironment
+fonts/                Rubik (OFL)
 js/audio.js           Web Audio synthesized sound effects, music and spoken cheers
 js/generator.js       level generator + solver (shared by browser and build script)
 js/worlds.js          world themes and difficulty curve
 js/levels-data.js     pre-generated campaign levels (built by tools/build-levels.mjs)
 js/vehicles.js        vehicle catalogue + reward track
-js/parent.js          grown-ups gate and settings panel
+js/parent.js          settings panel + optional grown-up check
 sw.js                 offline service worker (bump VERSION when files change)
 tools/                level builder, icon renderer, headless smoke + offline tests
 ```

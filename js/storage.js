@@ -3,21 +3,34 @@
 const KEY = 'beepbeepjam.v1';
 
 export const DEFAULT_SETTINGS = {
+  schema: 2,
   sfx: true,
   sfxVol: 0.8,
   music: true,
-  musicVol: 0.35,
-  voice: true,
+  musicVol: 0.3,
+  voice: false,
   haptics: true,
-  hints: 8, // seconds idle before a helping hand appears; 0 = off
+  hints: 0, // seconds idle before the helping hand appears on its own; 0 = only via the hint button
   speed: 1, // 0.7 slow, 1 normal, 1.4 fast
-  stars: 'gentle', // 'gentle' = always 3 stars, 'bumps' = fewer stars for bumps
+  stars: 'bumps', // 'bumps' = fewer stars for bumping, 'gentle' = always 3 stars
+  faces: false, // cartoon eyes on vehicles
+  kidMode: false,
+  parentLock: false, // require a grown-up check before opening settings
   timeLimit: 0, // minutes per session, 0 = off
   unlockAll: false,
   allVehicles: false,
   reduceMotion: false,
   showLevelNumbers: true,
 };
+
+// What "Kid mode" switches on and off in one go.
+export const KID_PRESET = { on: { faces: true, stars: 'gentle', hints: 5, speed: 0.8, voice: true }, off: { faces: false, stars: 'bumps', hints: 0, speed: 1, voice: false } };
+
+export function setKidMode(on) {
+  settings.kidMode = on;
+  Object.assign(settings, on ? KID_PRESET.on : KID_PRESET.off);
+  save();
+}
 
 const DEFAULT_PROGRESS = {
   unlocked: 1, // highest level number that may be played
@@ -30,6 +43,7 @@ const DEFAULT_PROGRESS = {
   day: '',
   rewardsSeen: 0, // number of rewards already revealed
   firstPlayed: null,
+  daily: {}, // 'YYYY-M-D' -> stars
 };
 
 function load() {
@@ -41,9 +55,15 @@ function load() {
 }
 
 const data = load();
-export const settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+const saved = data.settings || {};
+if (saved.schema !== DEFAULT_SETTINGS.schema) {
+  // v1 was toddler-first; adopt the new defaults for the gameplay feel but keep sound choices.
+  for (const k of ['voice', 'hints', 'stars', 'schema']) delete saved[k];
+}
+export const settings = { ...DEFAULT_SETTINGS, ...saved };
 export const progress = { ...DEFAULT_PROGRESS, ...(data.progress || {}) };
 progress.stars = { ...(progress.stars || {}) };
+progress.daily = { ...(progress.daily || {}) };
 
 export function save() {
   try {

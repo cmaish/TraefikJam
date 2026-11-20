@@ -1,5 +1,5 @@
 // Offline-first service worker: everything the game needs is precached.
-const VERSION = 'bbj-v1.0.1';
+const VERSION = 'bbj-v2.0.0';
 const ASSETS = [
   './',
   'index.html',
@@ -17,6 +17,14 @@ const ASSETS = [
   'js/worlds.js',
   'js/vehicles.js',
   'js/parent.js',
+  'js/models.js',
+  'js/studio.js',
+  'vendor/three.module.min.js',
+  'vendor/RoundedBoxGeometry.js',
+  'vendor/RoomEnvironment.js',
+  'fonts/rubik-latin-500-normal.woff2',
+  'fonts/rubik-latin-700-normal.woff2',
+  'fonts/rubik-latin-800-normal.woff2',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/icon-maskable-512.png',

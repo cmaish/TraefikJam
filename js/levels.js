@@ -15,7 +15,7 @@ function raw(n) {
       pets: L.p.map(([x, y]) => ({ x, y })),
     };
   }
-  if (!cache.has(n)) cache.set(n, generate(levelParams(n), n * 7919 + 13));
+  if (!cache.has(n)) cache.set(n, generate({ ...levelParams(n), attempts: 6 }, n * 7919 + 13));
   return cache.get(n);
 }
 
@@ -36,3 +36,20 @@ export function getLevel(n, unlocked) {
 }
 
 export { CAMPAIGN_LEVELS };
+
+/** The daily puzzle: same for everyone on a given date, hard-ish, rotating themes. */
+export function getDailyLevel(dateKey, unlocked) {
+  let seed = 0;
+  for (const ch of dateKey) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const theme = seed % WORLDS.length;
+  const base = WORLDS.length * 20 + 1 + theme; // a bonus-level-shaped puzzle for that theme
+  const p = { ...levelParams(base), attempts: 8 };
+  const lvl = generate(p, seed);
+  const W = WORLDS[theme];
+  const rand = makeRng(seed ^ 0x5bd1);
+  const vehicles = dressVehicles(lvl.vehicles, unlocked, rand).map((v, i) => ({ ...v, id: i }));
+  const obstacles = lvl.obstacles.map((o) => ({ ...o, type: W.obstacle === 'tree' && rand() < 0.4 ? 'bush' : W.obstacle }));
+  const petTypes = W.pets.length ? W.pets : ['duck'];
+  const pets = lvl.pets.map((pt, i) => ({ ...pt, id: i, type: petTypes[Math.floor(rand() * petTypes.length)] }));
+  return { n: 9000 + (seed % 997), daily: dateKey, theme: W.id, world: W, w: lvl.w, h: lvl.h, vehicles, obstacles, pets, bonus: true };
+}

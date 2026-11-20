@@ -1,5 +1,5 @@
-// Grown-ups area: a press-and-hold + sum gate, then settings & progress tools.
-import { settings, progress, save, completedCount, totalStars, resetProgress, resetSettings } from './storage.js';
+// Settings panel, plus an optional grown-up check (a simple sum) in front of it.
+import { settings, progress, save, completedCount, totalStars, resetProgress, resetSettings, setKidMode } from './storage.js';
 import { CAMPAIGN_LEVELS } from './levels.js';
 import { REWARDS, rewardName } from './vehicles.js';
 
@@ -8,26 +8,15 @@ let api = null;
 
 export function initParent(hooks) {
   api = hooks;
-  document.querySelectorAll('[data-parent]').forEach(attachHold);
   $('#gate-cancel').addEventListener('click', closeGate);
   $('#pp-close').addEventListener('click', closePanel);
+  $('#overlay-parent').addEventListener('click', (e) => { if (e.target.id === 'overlay-parent') closePanel(); });
 }
 
-function attachHold(btn) {
-  let timer = null;
-  let fired = false;
-  const cancel = () => { clearTimeout(timer); timer = null; btn.classList.remove('holding'); };
-  btn.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    fired = false;
-    btn.classList.add('holding');
-    timer = setTimeout(() => { cancel(); fired = true; openGate(() => openPanel()); }, 1600);
-  });
-  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(ev, cancel);
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    if (!fired) api?.toast('Grown-ups: press and hold the gear');
-  });
+/** Open settings, asking the grown-up question first when the lock is on. */
+export function requestSettings() {
+  if (settings.parentLock) openGate(openPanel);
+  else openPanel();
 }
 
 // ------------------------------------------------------------- gate ---
@@ -36,22 +25,24 @@ let gateCb = null;
 export function openGate(cb) {
   gateCb = cb;
   const a = 3 + Math.floor(Math.random() * 7);
-  const b = 2 + Math.floor(Math.random() * 8);
-  const ans = a + b;
+  const b = 4 + Math.floor(Math.random() * 6);
+  const ans = a * b > 40 ? a + b : a * b;
+  const q = a * b > 40 ? `${a} + ${b}` : `${a} × ${b}`;
   const opts = new Set([ans]);
   while (opts.size < 4) {
-    const d = ans + Math.floor(Math.random() * 9) - 4;
+    const d = ans + Math.floor(Math.random() * 11) - 5;
     if (d > 1 && d !== ans) opts.add(d);
   }
-  $('#gate-q').textContent = `${a} + ${b} = ?`;
+  $('#gate-q').textContent = `${q} = ?`;
   const box = $('#gate-answers');
   box.innerHTML = '';
   [...opts].sort(() => Math.random() - 0.5).forEach((n) => {
     const bt = document.createElement('button');
     bt.textContent = n;
     bt.addEventListener('click', () => {
-      if (n === ans) { closeGate(); gateCb && gateCb(); }
-      else closeGate();
+      closeGate();
+      if (n === ans) gateCb && gateCb();
+      else api?.toast('Not quite. Try again.');
     });
     box.appendChild(bt);
   });
@@ -76,31 +67,36 @@ function el(html) {
   return t.content.firstElementChild;
 }
 
-function toggleRow(key, label, note = '') {
+function toggleRow(key, label, note = '', onChange) {
   const row = el(`<div class="pp-row"><label for="s-${key}">${label}${note ? `<small>${note}</small>` : ''}</label>
-    <span class="switch"><input type="checkbox" id="s-${key}"><span></span></span></div>`);
+    <span class="switch"><input type="checkbox" role="switch" id="s-${key}"><span></span></span></div>`);
   const input = row.querySelector('input');
   input.checked = !!settings[key];
-  input.addEventListener('change', () => { settings[key] = input.checked; changed(key); });
-  row.querySelector('.switch').addEventListener('click', (e) => { if (e.target !== input) { input.checked = !input.checked; input.dispatchEvent(new Event('change')); } });
+  input.addEventListener('change', () => {
+    if (onChange) onChange(input.checked);
+    else settings[key] = input.checked;
+    changed(key);
+  });
   return row;
 }
 
 function segRow(key, label, options, note = '') {
-  const row = el(`<div class="pp-row"><span class="lbl">${label}${note ? `<small>${note}</small>` : ''}</span><div class="seg"></div></div>`);
+  const row = el(`<div class="pp-row stack"><span class="lbl">${label}${note ? `<small>${note}</small>` : ''}</span><div class="seg" role="radiogroup"></div></div>`);
   const seg = row.querySelector('.seg');
+  const sync = () => seg.querySelectorAll('button').forEach((x) => {
+    const on = x.dataset.val === String(settings[key]);
+    x.classList.toggle('on', on);
+    x.setAttribute('aria-checked', on);
+  });
   for (const [val, text] of options) {
     const b = document.createElement('button');
     b.textContent = text;
-    b.classList.toggle('on', settings[key] === val);
-    b.addEventListener('click', () => {
-      settings[key] = val;
-      seg.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
-      b.classList.add('on');
-      changed(key);
-    });
+    b.setAttribute('role', 'radio');
+    b.dataset.val = String(val);
+    b.addEventListener('click', () => { settings[key] = val; sync(); changed(key); });
     seg.appendChild(b);
   }
+  sync();
   return row;
 }
 
@@ -112,21 +108,22 @@ function rangeRow(key, label) {
   return row;
 }
 
+function group(title, ...rows) {
+  const g = el(`<div class="pp-group"><h4>${title}</h4></div>`);
+  rows.forEach((r) => g.appendChild(r));
+  return g;
+}
+
 // Two-tap confirm (window.confirm is unavailable in some embedded views).
 function confirmButton(btn, label, action) {
   let armed = null;
   const original = btn.textContent;
   btn.addEventListener('click', () => {
-    if (armed) { clearTimeout(armed); armed = null; btn.textContent = original; action(); return; }
+    if (armed) { clearTimeout(armed); armed = null; btn.textContent = original; btn.classList.remove('armed'); action(); return; }
     btn.textContent = label;
-    armed = setTimeout(() => { armed = null; btn.textContent = original; }, 3000);
+    btn.classList.add('armed');
+    armed = setTimeout(() => { armed = null; btn.textContent = original; btn.classList.remove('armed'); }, 3000);
   });
-}
-
-function group(title, ...rows) {
-  const g = el(`<div class="pp-group"><h4>${title}</h4></div>`);
-  rows.forEach((r) => g.appendChild(r));
-  return g;
 }
 
 function changed(key) {
@@ -136,46 +133,48 @@ function changed(key) {
 
 function nextRewardText() {
   const r = REWARDS.find((x) => x.at > completedCount());
-  if (!r) return 'All surprises found!';
-  return `${rewardName(r)} after ${r.at} levels`;
+  if (!r) return 'Everything unlocked!';
+  return `${rewardName(r)} at ${r.at} levels completed`;
 }
 
 export function openPanel() {
   const body = $('#pp-body');
+  const scroll = body.scrollTop;
   body.innerHTML = '';
   const done = completedCount();
-  const stats = el(`<div class="pp-group"><h4>Progress</h4><div class="pp-stats">
-      <div class="pp-stat"><b>${Math.min(progress.unlocked, 9999)}</b><span>Furthest level (of ${CAMPAIGN_LEVELS} + bonus)</span></div>
+  body.appendChild(el(`<div class="pp-group"><h4>Progress</h4><div class="pp-stats">
       <div class="pp-stat"><b>${done}</b><span>Levels completed</span></div>
-      <div class="pp-stat"><b>${totalStars()}</b><span>Stars collected</span></div>
-      <div class="pp-stat"><b>${progress.carsCleared}</b><span>Vehicles parked out</span></div>
+      <div class="pp-stat"><b>${totalStars()}</b><span>Stars</span></div>
+      <div class="pp-stat"><b>${Math.min(progress.unlocked, 9999)}</b><span>Furthest level (${CAMPAIGN_LEVELS} + bonus)</span></div>
+      <div class="pp-stat"><b>${progress.carsCleared}</b><span>Vehicles cleared</span></div>
       <div class="pp-stat"><b>${fmtTime(progress.day === api.today() ? progress.daySeconds : 0)}</b><span>Played today</span></div>
       <div class="pp-stat"><b>${fmtTime(progress.playSeconds)}</b><span>Played in total</span></div>
-    </div><div class="pp-note">Next surprise: ${nextRewardText()}</div></div>`);
-  body.appendChild(stats);
+    </div><div class="pp-note">Next unlock: ${nextRewardText()}</div></div>`));
 
   body.appendChild(group('Sound',
     toggleRow('sfx', 'Sound effects'),
     rangeRow('sfxVol', 'Effects volume'),
     toggleRow('music', 'Music'),
     rangeRow('musicVol', 'Music volume'),
-    toggleRow('voice', 'Spoken cheers', 'Uses the device voice ("Great job!")'),
-    toggleRow('haptics', 'Vibration', 'On supported phones'),
+    toggleRow('voice', 'Spoken cheers', 'Uses the device voice'),
+    toggleRow('haptics', 'Vibration', 'On phones that support it'),
   ));
 
-  body.appendChild(group('Play',
-    segRow('hints', 'Helping hand', [[0, 'Off'], [4, '4s'], [8, '8s'], [15, '15s']], 'Shows which car can go after a pause'),
+  body.appendChild(group('Gameplay',
+    toggleRow('kidMode', 'Kid mode', 'Cartoon faces, always 3 stars, slower cars, automatic hints and spoken cheers', (on) => { setKidMode(on); setTimeout(openPanel, 0); }),
+    segRow('hints', 'Automatic hint', [[0, 'Off'], [5, '5 s'], [10, '10 s'], [20, '20 s']], 'Highlights a car that can leave after a pause. The bulb button always works.'),
     segRow('speed', 'Car speed', [[0.7, 'Slow'], [1, 'Normal'], [1.4, 'Fast']]),
-    segRow('stars', 'Stars', [['gentle', 'Always 3'], ['bumps', 'Count bumps']], 'Count bumps gives fewer stars for bumping into things'),
-    toggleRow('reduceMotion', 'Calmer effects', 'Less confetti and no screen shake'),
+    segRow('stars', 'Stars', [['bumps', 'Fewer for bumps'], ['gentle', 'Always 3']]),
+    toggleRow('faces', 'Cartoon faces on vehicles', 'Takes effect from the next level'),
+    toggleRow('reduceMotion', 'Calmer effects', 'Less confetti, no screen shake'),
     toggleRow('showLevelNumbers', 'Show level numbers'),
   ));
 
-  body.appendChild(group('Play time',
-    segRow('timeLimit', 'Session limit', [[0, 'Off'], [10, '10'], [15, '15'], [20, '20'], [30, '30'], [45, '45'], [60, '60']], 'Minutes, then a "time for a rest" screen appears. A grown-up can continue.'),
+  body.appendChild(group('Parental controls',
+    toggleRow('parentLock', 'Lock settings', 'Asks a quick sum before settings open, so little ones can’t change things'),
+    segRow('timeLimit', 'Play-time limit', [[0, 'Off'], [10, '10'], [15, '15'], [20, '20'], [30, '30'], [45, '45'], [60, '60']], 'Minutes per session. Then a “time for a rest” screen appears.'),
   ));
 
-  // Levels & unlocks
   const jump = el(`<div class="pp-row"><label for="jump-n">Jump to level<small>Skip ahead or go back</small></label>
     <input type="number" id="jump-n" min="1" max="999" inputmode="numeric"><button class="pp-btn">Go</button></div>`);
   const jn = jump.querySelector('input');
@@ -189,21 +188,20 @@ export function openPanel() {
     api.startLevel(n);
   });
   body.appendChild(group('Levels & garage',
-    toggleRow('unlockAll', 'Unlock all levels', 'Every level can be picked from the level map'),
-    toggleRow('allVehicles', 'Unlock all vehicles', 'Fire trucks, ice cream vans & paint jobs right away'),
+    toggleRow('unlockAll', 'Unlock all levels'),
+    toggleRow('allVehicles', 'Unlock all vehicles & paint'),
     jump,
   ));
 
-  // Reset
-  const resetP = el(`<div class="pp-row"><span class="lbl">Reset progress<small>Levels, stars and garage start over</small></span><button class="pp-btn danger">Reset</button></div>`);
-  confirmButton(resetP.querySelector('button'), 'Tap again', () => {
+  const resetP = el(`<div class="pp-row"><span class="lbl">Reset progress<small>Levels, stars and unlocks start over</small></span><button class="pp-btn danger">Reset</button></div>`);
+  confirmButton(resetP.querySelector('button'), 'Tap to confirm', () => {
     resetProgress();
     api.onReset();
     openPanel();
     api.toast('Progress reset');
   });
   const resetS = el(`<div class="pp-row"><span class="lbl">Reset settings<small>Back to the defaults</small></span><button class="pp-btn ghost">Reset</button></div>`);
-  confirmButton(resetS.querySelector('button'), 'Tap again', () => {
+  confirmButton(resetS.querySelector('button'), 'Tap to confirm', () => {
     resetSettings();
     api.onSettings('*');
     openPanel();
@@ -211,15 +209,14 @@ export function openPanel() {
   });
   body.appendChild(group('Reset', resetP, resetS));
 
-  const sw = api.offlineStatus();
   body.appendChild(el(`<div class="pp-group"><h4>About</h4><div class="pp-note">
-    <b>Beep Beep Jam</b> — no ads, no tracking, no in-app purchases. Everything is stored on this device only.<br><br>
-    Offline: ${sw}<br>
-    Install: in Safari tap Share → <i>Add to Home Screen</i>; in Chrome use the menu → <i>Install app</i>.<br><br>
-    Tip: guided access (iPhone/iPad) or screen pinning (Android) keeps little hands inside the game.
+    <b>Beep Beep Jam</b>: no ads, no tracking, no purchases. Progress is saved on this device only.<br>
+    Offline play: ${api.offlineStatus()}<br>
+    Install: Safari → Share → <i>Add to Home Screen</i>; Chrome → menu → <i>Install app</i>.
     </div></div>`));
 
   $('#overlay-parent').classList.add('show');
+  body.scrollTop = scroll;
   api.onPanel?.(true);
 }
 

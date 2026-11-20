@@ -28,11 +28,9 @@ async function solve(n, shotMid) {
     const target = await page.evaluate(() => {
       const g = window.__app.game;
       if (g.won) return null;
-      const h = g.findHint();
-      if (!h) return 'wait';
-      const s = g.cell;
-      if (h.kind === 'vehicle') { const [x, y] = g._centerPx(h.obj); return [x, y]; }
-      return [g.ox + (h.obj.x + 0.5) * s, g.oy + (h.obj.y + 0.5) * s];
+      const anyBusy = g.vehicles.some((v) => v.state === 'bump');
+      if (anyBusy) return 'wait';
+      return g.debugTargets() || 'wait';
     });
     if (target === null) break;
     if (target !== 'wait') {
@@ -69,18 +67,44 @@ await page.evaluate(() => window.__app.show('levels'));
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${out}/levels.png` });
 await page.evaluate(() => window.__app.show('garage'));
-await page.waitForTimeout(300);
+await page.waitForTimeout(1500);
 await page.screenshot({ path: `${out}/garage.png` });
-await page.evaluate(() => window.__app.openGate(() => window.__app.openPanel()));
+await page.tap('.g-item:not(.locked)');
+await page.waitForTimeout(800);
+await page.screenshot({ path: `${out}/showcase.png` });
+await page.tap('#show-close');
+await page.evaluate(() => window.__app.show('home'));
+await page.waitForTimeout(800);
+await page.screenshot({ path: `${out}/home2.png` });
+
+// settings: open with a tap, flip the lock, then go through the grown-up check
+await page.tap('#btn-settings');
+await page.waitForTimeout(400);
+const panelOpen = await page.isVisible('#overlay-parent.show');
+await page.screenshot({ path: `${out}/settings.png` });
+await page.tap('#s-parentLock');
+await page.tap('#s-music');
+const lockOn = await page.evaluate(() => window.__app.settings.parentLock && !window.__app.settings.music);
+await page.tap('#pp-close');
 await page.waitForTimeout(300);
+await page.tap('#btn-settings');
+await page.waitForTimeout(300);
+const gateOpen = await page.isVisible('#overlay-gate.show');
 await page.screenshot({ path: `${out}/gate.png` });
-await page.evaluate(() => window.__app.openPanel());
+const q = await page.textContent('#gate-q');
+const m = q.match(/(\d+)\s*([+×])\s*(\d+)/);
+const ans = m[2] === '+' ? +m[1] + +m[3] : +m[1] * +m[3];
+await page.tap(`#gate-answers button:text-is("${ans}")`);
 await page.waitForTimeout(300);
-await page.screenshot({ path: `${out}/parent.png` });
+const panelAfterGate = await page.isVisible('#overlay-parent.show');
+await page.tap('#s-parentLock');
+await page.tap('#s-music');
+await page.tap('#pp-close');
+console.log('settings: opens', panelOpen, '| toggles', lockOn, '| gate', gateOpen, '| gate->panel', panelAfterGate);
 
 // landscape
 await page.setViewportSize({ width: 900, height: 420 });
-await page.evaluate(() => { document.querySelector('#overlay-parent').classList.remove('show'); document.querySelector('#overlay-gate').classList.remove('show'); window.__app.startLevel(90); });
+await page.evaluate(() => { window.__app.startLevel(90); });
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${out}/landscape.png` });
 await page.evaluate(() => window.__app.show('home'));

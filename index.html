@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Beep Beep Jam</title>
-  <meta name="description" content="A gentle, ad-free car parking puzzle for little drivers. Works offline.">
-  <meta name="theme-color" content="#4cc3ff">
+  <meta name="description" content="An ad-free 3D parking-lot puzzle. Tap the cars out in the right order. Works offline.">
+  <meta name="theme-color" content="#1b2340">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -21,94 +21,143 @@
       <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" fill="currentColor"/></symbol>
       <symbol id="i-redo" viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" fill="currentColor"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.5" fill="currentColor"/></symbol>
       <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.4-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.4 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.7h4l.4-2.7a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" fill="currentColor" transform="translate(-1 0)"/></symbol>
-      <symbol id="i-back" viewBox="0 0 24 24"><path d="M15.5 4.5 8 12l7.5 7.5" stroke="currentColor" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M15.5 4.5 8 12l7.5 7.5" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z" fill="currentColor"/></symbol>
       <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2.5 2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.2 1.3-6.6-4.9-4.6 6.6-.8z" fill="currentColor"/></symbol>
-      <symbol id="i-map" viewBox="0 0 24 24"><path d="M4 6h4v4H4zM10 6h4v4h-4zM16 6h4v4h-4zM4 14h4v4H4zM10 14h4v4h-4zM16 14h4v4h-4z" fill="currentColor"/></symbol>
+      <symbol id="i-map" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2" fill="currentColor"/><rect x="13.5" y="3.5" width="7" height="7" rx="2" fill="currentColor"/><rect x="3.5" y="13.5" width="7" height="7" rx="2" fill="currentColor"/><rect x="13.5" y="13.5" width="7" height="7" rx="2" fill="currentColor"/></symbol>
       <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 11l1.6-4.2A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.3L19 11a2 2 0 0 1 2 2v4h-2a2 2 0 0 1-4 0H9a2 2 0 0 1-4 0H3v-4a2 2 0 0 1 2-2zm2.2 0h9.6l-1.1-3.2a.5.5 0 0 0-.5-.3H8.8a.5.5 0 0 0-.5.3z" fill="currentColor"/></symbol>
-      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-cal" viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v10H5zm2 2v3h3v-3z" fill="currentColor"/></symbol>
+      <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zM9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z" fill="currentColor"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+      <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2s5 4.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2-4.6 0 1.6.8 2.6 2 2.6 0-3.3 1-6 1-8z" fill="currentColor"/></symbol>
     </defs>
   </svg>
+
+  <div id="stage">
+    <canvas id="board"></canvas>
+    <canvas id="fx"></canvas>
+  </div>
 
   <div id="app">
     <!-- HOME -->
     <section id="screen-home" class="screen active">
-      <button class="parent-btn" data-parent aria-label="Grown-ups: press and hold">
-        <svg><use href="#i-gear"/></svg><span class="hold-ring"></span>
-      </button>
-      <div class="home-sky">
-        <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div>
+      <header class="home-top">
+        <div class="chip" id="home-stars"><svg><use href="#i-star"/></svg><span>0</span></div>
+        <div class="chip chip-flame hidden" id="home-streak"><svg><use href="#i-flame"/></svg><span>0</span></div>
+      </header>
+      <div class="logo" aria-label="Beep Beep Jam">
+        <span class="logo-small">Beep Beep</span>
+        <span class="logo-big">JAM</span>
       </div>
-      <h1 class="logo"><span class="l1">Beep</span><span class="l2">Beep</span><span class="l3">Jam!</span></h1>
-      <div class="home-buttons">
-        <button id="btn-play" class="big-btn play-btn"><svg><use href="#i-play"/></svg><span id="play-label" class="play-level"></span></button>
-        <div class="home-row">
-          <button id="btn-levels" class="round-btn levels-btn" aria-label="Levels"><svg><use href="#i-map"/></svg></button>
-          <button id="btn-garage" class="round-btn garage-btn" aria-label="Garage"><svg><use href="#i-car"/></svg></button>
-        </div>
+      <div class="home-bottom">
+        <button id="btn-play" class="btn btn-primary btn-play">
+          <span class="play-kicker" id="play-world">Sunny Town</span>
+          <span class="play-main"><svg><use href="#i-play"/></svg><span id="play-label">Level 1</span></span>
+        </button>
+        <nav class="home-nav">
+          <button id="btn-levels" class="tile"><svg><use href="#i-map"/></svg><span>Levels</span></button>
+          <button id="btn-daily" class="tile"><svg><use href="#i-cal"/></svg><span>Daily</span><i class="dot hidden" id="daily-dot"></i></button>
+          <button id="btn-garage" class="tile"><svg><use href="#i-car"/></svg><span>Garage</span></button>
+          <button id="btn-settings" class="tile"><svg><use href="#i-gear"/></svg><span>Settings</span></button>
+        </nav>
       </div>
-      <canvas id="home-road"></canvas>
     </section>
 
     <!-- LEVELS -->
-    <section id="screen-levels" class="screen">
+    <section id="screen-levels" class="screen solid">
       <header class="bar">
-        <button class="round-btn small" data-go="home" aria-label="Back"><svg><use href="#i-back"/></svg></button>
-        <div class="bar-title"><svg class="star-ico"><use href="#i-star"/></svg> <span id="levels-stars">0</span></div>
-        <span class="bar-spacer"></span>
+        <button class="icon-btn" data-go="home" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+        <h2 class="bar-title">Levels</h2>
+        <div class="chip"><svg><use href="#i-star"/></svg><span id="levels-stars">0</span></div>
       </header>
       <div id="world-list" class="scroll"></div>
     </section>
 
     <!-- GARAGE -->
-    <section id="screen-garage" class="screen">
+    <section id="screen-garage" class="screen solid">
       <header class="bar">
-        <button class="round-btn small" data-go="home" aria-label="Back"><svg><use href="#i-back"/></svg></button>
-        <div class="bar-title">My Garage</div>
-        <span class="bar-spacer"></span>
+        <button class="icon-btn" data-go="home" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+        <h2 class="bar-title">Garage</h2>
+        <div class="chip" id="garage-count">0/0</div>
       </header>
       <div id="garage-list" class="scroll"></div>
     </section>
 
-    <!-- GAME -->
-    <section id="screen-game" class="screen">
-      <header class="bar game-bar">
-        <button id="btn-game-home" class="round-btn small" aria-label="Home"><svg><use href="#i-home"/></svg></button>
-        <div class="progress-wrap">
-          <div class="level-tag" id="level-tag"></div>
-          <div class="progress"><div class="progress-fill" id="progress-fill"></div><div class="progress-car" id="progress-car"><svg><use href="#i-car"/></svg></div></div>
+    <!-- GAME HUD -->
+    <section id="screen-game" class="screen passthrough">
+      <header class="hud" id="hud">
+        <button id="btn-pause" class="icon-btn" aria-label="Pause"><svg><use href="#i-pause"/></svg></button>
+        <div class="hud-mid">
+          <div class="hud-title" id="level-tag">Level 1</div>
+          <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+          <div class="hud-count" id="hud-count">0 / 0</div>
         </div>
-        <button id="btn-restart" class="round-btn small" aria-label="Start again"><svg><use href="#i-redo"/></svg></button>
+        <button id="btn-hint" class="icon-btn hint-btn" aria-label="Hint"><svg><use href="#i-bulb"/></svg></button>
+        <button id="btn-restart" class="icon-btn" aria-label="Restart level"><svg><use href="#i-redo"/></svg></button>
       </header>
-      <div class="board-wrap"><canvas id="board"></canvas></div>
     </section>
+
+    <!-- PAUSE -->
+    <div id="overlay-pause" class="overlay">
+      <div class="sheet">
+        <h3 class="sheet-title">Paused</h3>
+        <div class="sheet-buttons">
+          <button class="btn btn-primary" id="p-resume"><svg><use href="#i-play"/></svg>Resume</button>
+          <button class="btn" id="p-restart"><svg><use href="#i-redo"/></svg>Restart</button>
+          <button class="btn" id="p-levels"><svg><use href="#i-map"/></svg>Levels</button>
+          <button class="btn" id="p-settings"><svg><use href="#i-gear"/></svg>Settings</button>
+          <button class="btn" id="p-home"><svg><use href="#i-home"/></svg>Home</button>
+        </div>
+      </div>
+    </div>
 
     <!-- WIN -->
     <div id="overlay-win" class="overlay">
-      <div class="card win-card">
-        <div class="win-title" id="win-title">Yay!</div>
+      <div class="sheet win-sheet">
+        <div class="win-kicker" id="win-kicker">Level 1</div>
+        <div class="win-title" id="win-title">Lot cleared!</div>
         <div class="win-stars">
           <svg class="wstar"><use href="#i-star"/></svg>
           <svg class="wstar"><use href="#i-star"/></svg>
           <svg class="wstar"><use href="#i-star"/></svg>
         </div>
-        <div class="win-buttons">
-          <button id="btn-replay" class="round-btn" aria-label="Play again"><svg><use href="#i-redo"/></svg></button>
-          <button id="btn-next" class="big-btn next-btn" aria-label="Next level"><svg><use href="#i-play"/></svg></button>
+        <div class="win-stats">
+          <div><b id="st-moves">0</b><span>Moves</span></div>
+          <div><b id="st-bumps">0</b><span>Bumps</span></div>
+          <div><b id="st-time">0:00</b><span>Time</span></div>
+        </div>
+        <div class="win-tip" id="win-tip"></div>
+        <button id="btn-next" class="btn btn-primary btn-wide"><span id="next-label">Next level</span><svg><use href="#i-play"/></svg></button>
+        <div class="win-row">
+          <button id="btn-replay" class="btn"><svg><use href="#i-redo"/></svg>Replay</button>
+          <button id="btn-win-home" class="btn"><svg><use href="#i-home"/></svg>Home</button>
         </div>
       </div>
     </div>
 
     <!-- REWARD -->
-    <div id="overlay-reward" class="overlay">
+    <div id="overlay-reward" class="overlay reward">
       <div class="reward-stage">
+        <div class="reward-kicker" id="reward-kicker">Unlocked</div>
         <div class="reward-text" id="reward-text">A present!</div>
         <button id="gift" class="gift" aria-label="Open the present">
           <span class="gift-lid"></span><span class="gift-box"></span><span class="gift-ribbon"></span>
         </button>
-        <canvas id="reward-canvas" width="300" height="300"></canvas>
-        <button id="btn-reward-ok" class="big-btn next-btn hidden" aria-label="Keep playing"><svg><use href="#i-play"/></svg></button>
+        <div id="reward-view" class="reward-view"></div>
+        <button id="btn-reward-ok" class="btn btn-primary btn-wide hidden">Keep playing<svg><use href="#i-play"/></svg></button>
+      </div>
+    </div>
+
+    <!-- GARAGE SHOWCASE -->
+    <div id="overlay-show" class="overlay">
+      <div class="sheet show-sheet">
+        <button class="icon-btn sheet-close" id="show-close" aria-label="Close"><svg><use href="#i-x"/></svg></button>
+        <div id="show-view" class="show-view"></div>
+        <div class="show-name" id="show-name"></div>
+        <div class="show-sub" id="show-sub"></div>
+        <button class="btn btn-primary" id="show-honk">Beep beep!</button>
       </div>
     </div>
 
@@ -116,31 +165,28 @@
     <div id="overlay-rest" class="overlay rest">
       <div class="rest-stage">
         <div class="moon"></div>
-        <canvas id="rest-canvas" width="300" height="200"></canvas>
         <div class="rest-text">Time for a rest!</div>
         <div class="zzz"><span>z</span><span>z</span><span>z</span></div>
-        <button class="parent-btn rest-parent" data-parent aria-label="Grown-ups: press and hold">
-          <svg><use href="#i-gear"/></svg><span class="hold-ring"></span>
-        </button>
+        <button class="btn rest-btn" id="rest-continue">Grown-ups: continue</button>
       </div>
     </div>
 
-    <!-- PARENT GATE -->
+    <!-- GROWN-UP CHECK -->
     <div id="overlay-gate" class="overlay">
-      <div class="card gate-card">
-        <div class="gate-title">Grown-ups only</div>
+      <div class="sheet gate-sheet">
+        <div class="gate-title">Grown-up check</div>
         <div class="gate-q" id="gate-q"></div>
         <div class="gate-answers" id="gate-answers"></div>
         <button class="link-btn" id="gate-cancel">Cancel</button>
       </div>
     </div>
 
-    <!-- PARENT PANEL -->
+    <!-- SETTINGS -->
     <div id="overlay-parent" class="overlay">
       <div class="parent-panel">
         <header class="pp-head">
-          <h2>Grown-ups</h2>
-          <button class="round-btn small" id="pp-close" aria-label="Close"><svg><use href="#i-x"/></svg></button>
+          <h2>Settings</h2>
+          <button class="icon-btn" id="pp-close" aria-label="Close"><svg><use href="#i-x"/></svg></button>
         </header>
         <div class="pp-body" id="pp-body"></div>
       </div>

@@ -1,15 +1,15 @@
 {
   "name": "Beep Beep Jam",
   "short_name": "Beep Jam",
-  "description": "A gentle, ad-free car parking puzzle for little drivers. Works offline.",
+  "description": "An ad-free 3D parking-lot puzzle. Works offline.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
   "display_override": ["fullscreen", "standalone"],
   "orientation": "any",
-  "background_color": "#4cc3ff",
-  "theme_color": "#4cc3ff",
+  "background_color": "#141b33",
+  "theme_color": "#1b2340",
   "categories": ["games", "kids", "education"],
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
