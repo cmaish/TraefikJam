@@ -3,7 +3,7 @@
 A gentle, **ad-free** "drive the cars out of the parking lot" puzzle for toddlers and
 little kids. It's an installable PWA that works **fully offline**, with no tracking, no
 accounts and no purchases. Everything (art, sounds, music, levels) is made in code, so the
-whole app is about 250 KB.
+whole app is under 500 KB.
 
 ## How to play
 
