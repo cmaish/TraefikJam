@@ -1,5 +1,5 @@
 // Offline-first service worker: everything the game needs is precached.
-const VERSION = 'bbj-v3.0.1';
+const VERSION = 'bbj-v3.1.0';
 const ASSETS = [
   './',
   'index.html',

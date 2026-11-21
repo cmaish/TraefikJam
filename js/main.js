@@ -9,7 +9,7 @@ import * as studio from './studio.js';
 import { loadRealistic, realisticReady, REAL, REAL_FILES } from './realistic.js';
 
 const $ = (s) => document.querySelector(s);
-const VERSION = '3.0.1';
+const VERSION = '3.1.0';
 
 // ------------------------------------------------------------ helpers ---
 
@@ -49,6 +49,62 @@ function dailyStreak() {
   while (progress.daily[dayKey(d)]) { n++; d.setDate(d.getDate() - 1); }
   return n;
 }
+
+// ------------------------------------------------------------ full screen ---
+// Browsers only allow this straight from a tap, so it's requested inside click handlers.
+
+const fsRoot = document.documentElement;
+const fsInstalled = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
+const fsSupported = !fsInstalled && !!(document.fullscreenEnabled || document.webkitFullscreenEnabled) && !!(fsRoot.requestFullscreen || fsRoot.webkitRequestFullscreen);
+const isFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+let fsOptOut = false; // the player left full screen themselves: stop forcing it until they ask again
+let fsWas = false;
+
+function enterFullscreen() {
+  if (!fsSupported || isFullscreen()) return;
+  try {
+    const req = fsRoot.requestFullscreen ? fsRoot.requestFullscreen({ navigationUI: 'hide' }) : fsRoot.webkitRequestFullscreen();
+    if (req && req.catch) req.catch(() => {});
+  } catch { /* not allowed here */ }
+}
+
+function exitFullscreen() {
+  try {
+    const r = document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen?.();
+    if (r && r.catch) r.catch(() => {});
+  } catch { /* ignore */ }
+}
+
+function toggleFullscreen() {
+  if (isFullscreen()) exitFullscreen();
+  else { fsOptOut = false; enterFullscreen(); }
+}
+
+/** Called at the start of a level (inside the tap that started it). */
+function autoFullscreen() {
+  if (settings.autoFullscreen && !fsOptOut) enterFullscreen();
+}
+
+function syncFullscreenButtons() {
+  const on = isFullscreen();
+  document.querySelectorAll('.fs-btn').forEach((b) => {
+    b.classList.toggle('hidden', !fsSupported);
+    b.querySelector('use').setAttribute('href', on ? '#i-collapse' : '#i-expand');
+    b.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+    const label = b.querySelector('span');
+    if (label) label.textContent = on ? 'Exit full screen' : 'Full screen';
+  });
+}
+
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+  document.addEventListener(ev, () => {
+    const now = isFullscreen();
+    if (fsWas && !now) fsOptOut = true;
+    fsWas = now;
+    syncFullscreenButtons();
+  });
+}
+syncFullscreenButtons();
 
 // ------------------------------------------------------------ screens ---
 
@@ -140,6 +196,7 @@ function showcase() {
 }
 
 function startLevel(n) {
+  autoFullscreen();
   current = n;
   daily = null;
   progress.current = n;
@@ -154,6 +211,7 @@ function startLevel(n) {
 }
 
 function startDaily() {
+  autoFullscreen();
   daily = dayKey();
   hideOverlays();
   show('game');
@@ -598,4 +656,7 @@ requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {
 }, 250)));
 
 // handy for automated tests
+$('#btn-fs-home').addEventListener('click', () => { audio.sfx.tap(); toggleFullscreen(); });
+$('#p-fullscreen').addEventListener('click', () => { audio.sfx.tap(); toggleFullscreen(); });
+
 window.__app = { game, startLevel, startDaily, show, settings, progress, openPanel, openGate, requestSettings, loadRealistic, REAL, REAL_FILES };

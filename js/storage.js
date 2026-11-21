@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS = {
   stars: 'bumps', // 'bumps' = fewer stars for bumping, 'gentle' = always 3 stars
   faces: false, // cartoon eyes on vehicles
   realistic: false, // use the realistic (Kenney Car Kit) models instead of toy-style ones
+  autoFullscreen: true, // go full screen when a level starts (where the browser allows it)
   kidMode: false,
   parentLock: false, // require a grown-up check before opening settings
   timeLimit: 0, // minutes per session, 0 = off

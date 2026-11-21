@@ -30,6 +30,8 @@
       <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 11l1.6-4.2A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.3L19 11a2 2 0 0 1 2 2v4h-2a2 2 0 0 1-4 0H9a2 2 0 0 1-4 0H3v-4a2 2 0 0 1 2-2zm2.2 0h9.6l-1.1-3.2a.5.5 0 0 0-.5-.3H8.8a.5.5 0 0 0-.5.3z" fill="currentColor"/></symbol>
       <symbol id="i-cal" viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v10H5zm2 2v3h3v-3z" fill="currentColor"/></symbol>
       <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zM9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z" fill="currentColor"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
       <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2s5 4.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2-4.6 0 1.6.8 2.6 2 2.6 0-3.3 1-6 1-8z" fill="currentColor"/></symbol>
     </defs>
@@ -52,6 +54,7 @@
       <header class="home-top">
         <div class="chip" id="home-stars"><svg><use href="#i-star"/></svg><span>0</span></div>
         <div class="chip chip-flame hidden" id="home-streak"><svg><use href="#i-flame"/></svg><span>0</span></div>
+        <button class="icon-btn fs-btn hidden" id="btn-fs-home" aria-label="Full screen"><svg><use href="#i-expand"/></svg></button>
       </header>
       <div class="logo" aria-label="Beep Beep Jam">
         <span class="logo-small">Beep Beep</span>
@@ -118,6 +121,7 @@
           <button class="btn btn-primary" id="p-resume"><svg><use href="#i-play"/></svg>Resume</button>
           <button class="btn" id="p-restart"><svg><use href="#i-redo"/></svg>Restart</button>
           <button class="btn" id="p-levels"><svg><use href="#i-map"/></svg>Levels</button>
+          <button class="btn fs-btn hidden" id="p-fullscreen"><svg><use href="#i-expand"/></svg><span>Full screen</span></button>
           <button class="btn" id="p-settings"><svg><use href="#i-gear"/></svg>Settings</button>
           <button class="btn" id="p-home"><svg><use href="#i-home"/></svg>Home</button>
         </div>

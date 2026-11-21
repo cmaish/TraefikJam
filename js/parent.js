@@ -166,6 +166,7 @@ export function openPanel() {
     segRow('speed', 'Car speed', [[0.7, 'Slow'], [1, 'Normal'], [1.4, 'Fast']]),
     segRow('stars', 'Stars', [['bumps', 'Fewer for bumps'], ['gentle', 'Always 3']]),
     toggleRow('faces', 'Cartoon faces on vehicles', 'Takes effect from the next level'),
+    toggleRow('autoFullscreen', 'Full screen when a level starts', 'Where the browser allows it. Leaving full screen pauses this until you tap the full-screen button again.'),
     toggleRow('reduceMotion', 'Calmer effects', 'Less confetti, no screen shake'),
     toggleRow('showLevelNumbers', 'Show level numbers'),
   ));
