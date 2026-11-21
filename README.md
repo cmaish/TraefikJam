@@ -58,6 +58,13 @@ to four bumps, and 1 star otherwise. The 💡 button shows a vehicle that can le
 - **Win screen:** stars, moves, bumps and time for each level.
 - **Pause menu:** resume, restart, levels, settings or home.
 - Landscape and portrait both work, and the lot turns to fit the screen.
+- **Full screen:**
+  - Starting a level goes full screen.
+  - A ⛶ button on the home screen and in the pause menu toggles it.
+  - If you leave full screen yourself, it isn't forced again until you tap the button.
+  - The button hides where full screen isn't available: an iPhone browser, an embedded
+    view, or the installed app (which is already full screen).
+  - The automatic switch can be turned off in Settings.
 
 ## Settings
 

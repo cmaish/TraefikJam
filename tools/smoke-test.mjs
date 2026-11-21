@@ -103,6 +103,8 @@ await page.tap('#pp-close');
 console.log('settings: opens', panelOpen, '| toggles', lockOn, '| gate', gateOpen, '| gate->panel', panelAfterGate);
 
 // landscape
+await page.evaluate(() => document.fullscreenElement && document.exitFullscreen()); // the game may have gone full screen
+await page.waitForTimeout(300);
 await page.setViewportSize({ width: 900, height: 420 });
 await page.evaluate(() => { window.__app.startLevel(90); });
 await page.waitForTimeout(500);
