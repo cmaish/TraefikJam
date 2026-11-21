@@ -34,6 +34,22 @@ export const WORLDS = [
     obstacle: 'cone', pets: ['kitty', 'puppy'],
     grid: [[7, 9], [8, 10]], fill: [0.76, 0.87], truck: [0.35, 0.4], obstacles: [2, 4], petCount: [1, 2], hard: [0.85, 1], barriers: [3, 7], walkers: [1, 2], cars: [0.6, 3],
   },
+  // Big lots: the grid keeps growing, from 9x11 up to 15x19 (pinch / scroll to zoom).
+  {
+    id: 'city', name: 'Downtown', icon: '🏙️',
+    obstacle: 'cone', pets: ['puppy', 'kitty'],
+    grid: [[9, 11], [10, 13]], fill: [0.8, 0.86], truck: [0.35, 0.4], obstacles: [2, 4], petCount: [1, 2], hard: [0.85, 0.95], barriers: [4, 9], walkers: [2, 3], cars: [2, 3], big: true,
+  },
+  {
+    id: 'beach', name: 'Seaside', icon: '🏖️',
+    obstacle: 'palm', pets: ['duck', 'chick', 'puppy'],
+    grid: [[10, 13], [12, 16]], fill: [0.8, 0.86], truck: [0.35, 0.4], obstacles: [3, 5], petCount: [1, 3], hard: [0.85, 0.97], barriers: [6, 12], walkers: [2, 4], cars: [2, 3], big: true,
+  },
+  {
+    id: 'mega', name: 'Mega Lot', icon: '🏟️',
+    obstacle: 'cone', pets: ['puppy', 'kitty', 'duck'],
+    grid: [[12, 15], [15, 19]], fill: [0.8, 0.86], truck: [0.35, 0.42], obstacles: [4, 6], petCount: [2, 3], hard: [0.9, 1], barriers: [8, 16], walkers: [3, 4], cars: [3, 4], big: true,
+  },
 ];
 
 export const CAMPAIGN_LEVELS = WORLDS.length * LEVELS_PER_WORLD;
@@ -58,8 +74,9 @@ export function levelParams(n) {
     if (k === 5) tt = Math.max(0, t - 0.25);
     if (k === 0) tt = Math.min(1, t + 0.1);
   }
-  const w = Math.round(lerp(W.grid[0][0], W.grid[1][0], tt));
-  const h = Math.round(lerp(W.grid[0][1], W.grid[1][1], tt));
+  let w = Math.round(lerp(W.grid[0][0], W.grid[1][0], tt));
+  let h = Math.round(lerp(W.grid[0][1], W.grid[1][1], tt));
+  if (endless) { w = Math.min(w, 11); h = Math.min(h, 14); } // bonus lots are generated on the device
   const truck = lerp(W.truck[0], W.truck[1], tt);
   const obstacles = Math.round(lerp(W.obstacles[0], W.obstacles[1], tt));
   const pets = Math.round(lerp(W.petCount[0], W.petCount[1], tt));
@@ -76,6 +93,7 @@ export function levelParams(n) {
     improve: Math.round(lerp(150, 500, hard)),
     targetDepth: Math.max(1, Math.round(lerp(0.3, 0.75, hard) * count)),
     freeWeight: lerp(0, 0.5, hard),
-    attempts: 14,
+    attempts: W.big && !endless ? 6 : endless ? 4 : 14,
+    ...(W.big ? { fill: endless ? 120 : 400, improve: endless ? 150 : 300 } : {}),
   };
 }

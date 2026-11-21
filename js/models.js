@@ -11,7 +11,10 @@ function geo(key, make) {
   if (!geos.has(key)) { const g = make(); g.userData.cached = true; geos.set(key, g); }
   return geos.get(key);
 }
-export const rbox = (w, h, d, r = 0.05, seg = 3) =>
+// Rounded-corner smoothness: lowered while building very big lots to keep the triangle count sane.
+let SEG = 3;
+export function setDetail(high) { SEG = high ? 3 : 1; }
+export const rbox = (w, h, d, r = 0.05, seg = SEG) =>
   geo(`rb${w.toFixed(3)}|${h.toFixed(3)}|${d.toFixed(3)}|${r}|${seg}`, () => new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001)));
 const cyl = (rt, rb, h, seg = 20) => geo(`cy${rt}|${rb}|${h}|${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, seg));
 const sph = (r, seg = 16) => geo(`sp${r}|${seg}`, () => new THREE.SphereGeometry(r, seg, Math.max(8, seg * 0.75)));
@@ -49,14 +52,24 @@ function mesh(g, m, x = 0, y = 0, z = 0, parent) {
 
 // ------------------------------------------------------------ merging ---
 
-const KEEP = ['position', 'normal', 'uv'];
+const KEEP = ['position', 'normal', 'uv', 'color'];
 
 /**
  * Bake every static mesh under `root` into one mesh per material (and shadow flag),
  * so a vehicle or a field of scenery costs a handful of draw calls instead of dozens.
  * Meshes inside anything in `skip` stay separate (they animate on their own).
  */
-export function mergeStatic(root, skip = []) {
+const vcBody = () => mat('vcBody', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.08, envMapIntensity: 0.7 }));
+const vcLights = () => mat('vcLights', () => new THREE.MeshBasicMaterial({ vertexColors: true }));
+
+/** In "lite" merges, which shared bucket a material folds into (null = keep its own material). */
+function liteBucket(m) {
+  if (m.map || m === M.glass()) return null;
+  if (m.emissive && (m.emissive.r + m.emissive.g + m.emissive.b) > 0.01) return 'lights';
+  return 'body';
+}
+
+export function mergeStatic(root, skip = [], lite = false) {
   root.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const skipSet = new Set(skip.filter(Boolean));
@@ -72,8 +85,19 @@ export function mergeStatic(root, skip = []) {
     if (!g.attributes.normal) g.computeVertexNormals();
     g.clearGroups();
     g.applyMatrix4(rel.multiplyMatrices(inv, o.matrixWorld));
-    const key = o.material.uuid + (o.castShadow ? '|c' : '|n');
-    if (!buckets.has(key)) buckets.set(key, { mat: o.material, cast: o.castShadow, geos: [] });
+    let mtl = o.material;
+    const lb = lite ? liteBucket(mtl) : null;
+    if (lb) {
+      // bake the colour into the vertices so many parts share one material (= one draw call)
+      const c = lb === 'lights' ? mtl.emissive.clone().multiplyScalar(1.2) : mtl.color;
+      const n = g.attributes.position.count;
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      mtl = lb === 'lights' ? vcLights() : vcBody();
+    }
+    const key = mtl.uuid + (o.castShadow && !lite ? '|c' : '|n');
+    if (!buckets.has(key)) buckets.set(key, { mat: mtl, cast: o.castShadow && !lite, geos: [] });
     buckets.get(key).geos.push(g);
     gone.push(o);
   });
@@ -553,7 +577,7 @@ export function buildVehicle(v, opts = {}) {
 
   let eyeGroup = null;
   if (opts.faces) eyeGroup = eyes(body, eyeY, eyeZ);
-  if (opts.merge !== false) mergeStatic(body, [...sirens, drum && drum.parent]);
+  if (opts.merge !== false) mergeStatic(body, [...sirens, drum && drum.parent], !!opts.lite);
 
   root.userData = { body, wheels, sirens, drum, eyes: eyeGroup, len, L };
   root.traverse((o) => { o.userData.vroot = root; });
@@ -586,6 +610,8 @@ export function buildObstacle(type) {
     const h = mesh(cyl(0.26, 0.26, 0.72, 20), M.matte(0xf0c548), 0, 0.26, 0, g);
     h.rotation.z = Math.PI / 2;
     for (const x of [-0.18, 0.18]) { const b = mesh(cyl(0.265, 0.265, 0.04, 20), M.matte(0xa0522d), x, 0.26, 0, g); b.rotation.z = Math.PI / 2; }
+  } else if (type === 'palm') {
+    palmTree(g, 1);
   } else if (type === 'snowman') {
     const snow = M.matte(0xfbfdff);
     mesh(sph(0.27, 18), snow, 0, 0.25, 0, g);
@@ -599,6 +625,21 @@ export function buildObstacle(type) {
     mesh(torus(0.15, 0.035), M.matte(0xe63946), 0, 0.74, 0, g).rotation.x = Math.PI / 2;
   }
   return mergeStatic(g);
+}
+
+function palmTree(g, s, lean = 0.12) {
+  const trunk = new THREE.Group();
+  trunk.rotation.z = lean;
+  for (let i = 0; i < 6; i++) mesh(cyl(0.05 * s, 0.065 * s, 0.17 * s, 7), M.flat(i % 2 ? 0x9a6b3f : 0x8a5d33), 0, (0.085 + i * 0.16) * s, 0, trunk);
+  const top = 0.98 * s;
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 7) * Math.PI * 2;
+    const leaf = mesh(rbox(0.5 * s, 0.025 * s, 0.13 * s, 0.01), M.flat(k % 2 ? 0x3caa4e : 0x2f9a45), Math.cos(a) * 0.2 * s, top - 0.04 * s, Math.sin(a) * 0.2 * s, trunk);
+    leaf.rotation.y = -a;
+    leaf.rotation.z = -0.35;
+  }
+  for (const [x, z] of [[0.04, 0.03], [-0.04, 0.02], [0, -0.05]]) mesh(sph(0.045 * s, 8), M.matte(0x6b4a2a), x * s, top - 0.08 * s, z * s, trunk);
+  g.add(trunk);
 }
 
 // ------------------------------------------------------------ pets ---
@@ -675,7 +716,7 @@ export function buildPet(type) {
 export function buildDeco(type, rand) {
   const g = new THREE.Group();
   const r = () => rand();
-  const big = { house: 1, building: 1, barn: 1 }[type];
+  const big = { house: 1, building: 1, barn: 1, tower: 1 }[type];
   if (type !== 'flowers' && type !== 'lamp') blobShadow(big ? 1.1 : type === 'fence' ? 0.55 : 0.42, g, 1, type === 'fence' ? 0.4 : 1);
   switch (type) {
     case 'tree': {
@@ -750,6 +791,32 @@ export function buildDeco(type, rand) {
       mesh(cyl(0.03, 0.04, 1.3, 8), M.dark(), 0, 0.65, 0, g);
       mesh(rbox(0.12, 0.06, 0.3, 0.02), M.dark(), 0, 1.3, 0.12, g);
       mesh(rbox(0.1, 0.02, 0.24, 0.01), M.glow(0xffe6a0, 2.2), 0, 1.265, 0.12, g);
+      break;
+    }
+    case 'palm': {
+      palmTree(g, 1 + r() * 0.5, (r() - 0.5) * 0.4);
+      break;
+    }
+    case 'umbrella': {
+      mesh(cyl(0.02, 0.02, 0.7, 6), M.matte(0xffffff), 0, 0.35, 0, g);
+      const cols = [0xff5a5f, 0xffffff, 0x3478ff, 0xffd23f];
+      const c = cols[Math.floor(r() * cols.length)];
+      const top = mesh(cone(0.45, 0.18, 8), M.flat(c), 0, 0.72, 0, g);
+      void top;
+      mesh(rbox(0.6, 0.02, 0.3, 0.01), M.matte([0x3ccf6e, 0xff9f1c, 0x9b5de5][Math.floor(r() * 3)]), 0.35, 0.02, 0.2, g).rotation.y = r();
+      break;
+    }
+    case 'tower': {
+      const w = 1.3 + r() * 0.7, d = 1.2 + r() * 0.6, h = 1.6 + r() * 2.6;
+      const wall = [0xdfe6ee, 0xc9d6e3, 0xf2e8da, 0xd8e3d4, 0xb9c7d8][Math.floor(r() * 5)];
+      mesh(rbox(w, h, d, 0.04), M.matte(wall), 0, h / 2, 0, g);
+      mesh(rbox(w + 0.06, 0.08, d + 0.06, 0.02), M.matte(0x8a96a8), 0, h, 0, g);
+      for (let y = 0.35; y < h - 0.2; y += 0.34) {
+        mesh(new THREE.BoxGeometry(w * 0.86, 0.16, 0.02), M.glass(), 0, y, d / 2 + 0.01, g);
+        mesh(new THREE.BoxGeometry(0.02, 0.16, d * 0.86), M.glass(), w / 2 + 0.01, y, 0, g);
+        mesh(new THREE.BoxGeometry(0.02, 0.16, d * 0.86), M.glass(), -w / 2 - 0.01, y, 0, g);
+      }
+      if (r() < 0.5) mesh(rbox(0.3, 0.2, 0.3, 0.03), M.matte(0x9aa3ad), w * 0.2, h + 0.12, 0, g);
       break;
     }
     case 'snowpile': {

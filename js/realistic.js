@@ -2,7 +2,7 @@
 // Loaded once on demand; every vehicle on the board shares the same geometry and texture.
 import * as THREE from '../vendor/three.module.min.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { buildVehicle } from './models.js';
+import { buildVehicle, mergeStatic } from './models.js';
 
 const BASE = 'models/carkit/';
 
@@ -103,7 +103,8 @@ export function buildReal(v) {
   body.add(holder);
   root.add(body);
   const wheels = [];
-  model.traverse((o) => { if (/^wheel/.test(o.name)) wheels.push({ g: o, r: 0.3 * sy }); });
+  if (v.lite) mergeStatic(holder); // big lots: body + wheels in one draw call
+  else model.traverse((o) => { if (/^wheel/.test(o.name)) wheels.push({ g: o, r: 0.3 * sy }); });
   root.userData = { body, wheels, sirens: [], drum: null, eyes: null, len, L: len - 0.12, real: true };
   root.traverse((o) => { o.userData.vroot = root; });
   return root;

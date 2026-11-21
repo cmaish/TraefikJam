@@ -9,7 +9,7 @@ import * as studio from './studio.js';
 import { loadRealistic, realisticReady, REAL, REAL_FILES } from './realistic.js';
 
 const $ = (s) => document.querySelector(s);
-const VERSION = '3.1.0';
+const VERSION = '3.2.0';
 
 // ------------------------------------------------------------ helpers ---
 
@@ -160,6 +160,14 @@ try {
   onExit: (n, total) => updateProgress(n, total),
   onWin: (st) => onWin(st),
   onBump: (n) => updateHudStars(n, true),
+  onZoomable: (on) => {
+    $('#zoom-ctl').classList.toggle('hidden', !on);
+    if (on && !progress.zoomTip) {
+      progress.zoomTip = true;
+      save();
+      setTimeout(() => toast('Big lot! Pinch or scroll to zoom in, and drag to look around.'), 900);
+    }
+  },
   hudHeight: () => { const r = $('#hud').getBoundingClientRect(); return r.bottom > 0 ? r.bottom : 70; },
   showInsets: () => {
     const logo = $('.logo').getBoundingClientRect();
@@ -419,7 +427,7 @@ function starRow(n) {
   return h + '</span>';
 }
 
-const WORLD_COLORS = ['#ffad1f', '#ff7a45', '#2fae5b', '#7bb83a', '#3d9be0', '#6c5ce7', '#e0457b'];
+const WORLD_COLORS = ['#ffad1f', '#ff7a45', '#2fae5b', '#7bb83a', '#3d9be0', '#6c5ce7', '#5b7c99', '#16a3b8', '#d9503f', '#e0457b'];
 
 function renderLevels() {
   const list = $('#world-list');
@@ -429,7 +437,7 @@ function renderLevels() {
   const worlds = WORLDS.map((w, i) => ({ ...w, from: i * LEVELS_PER_WORLD + 1, to: (i + 1) * LEVELS_PER_WORLD, color: WORLD_COLORS[i] }));
   if (progress.unlocked > CAMPAIGN_LEVELS || settings.unlockAll) {
     const to = Math.max(CAMPAIGN_LEVELS + 20, Math.ceil((progress.unlocked + 5) / 5) * 5);
-    worlds.push({ name: 'Bonus Lots', icon: '🎁', from: CAMPAIGN_LEVELS + 1, to, color: WORLD_COLORS[6], bonus: true });
+    worlds.push({ name: 'Bonus Lots', icon: '🎁', from: CAMPAIGN_LEVELS + 1, to, color: WORLD_COLORS[WORLD_COLORS.length - 1], bonus: true });
   }
   let scrollTarget = null;
   for (const w of worlds) {
@@ -656,6 +664,9 @@ requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {
 }, 250)));
 
 // handy for automated tests
+$('#zoom-in').addEventListener('click', () => { audio.sfx.tap(); game.zoomBy(1.4); });
+$('#zoom-out').addEventListener('click', () => { audio.sfx.tap(); game.zoomBy(1 / 1.4); });
+$('#zoom-fit').addEventListener('click', () => { audio.sfx.tap(); game.zoomFit(); });
 $('#btn-fs-home').addEventListener('click', () => { audio.sfx.tap(); toggleFullscreen(); });
 $('#p-fullscreen').addEventListener('click', () => { audio.sfx.tap(); toggleFullscreen(); });
 

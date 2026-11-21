@@ -2,7 +2,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { DX, DY, isHoriz, vehicleCells, rayCells, rotateLevel, makeRng, barrierSet, exitBarred } from './generator.js';
-import { buildObstacle, buildPet, buildDeco, buildBarrier, buildPerson, mergeStatic, rbox } from './models.js';
+import { buildObstacle, buildPet, buildDeco, buildBarrier, buildPerson, mergeStatic, rbox, setDetail, blobShadow } from './models.js';
 import { vehicleModel } from './realistic.js';
 import { FX } from './fx.js';
 import { drawHand } from './draw.js';
@@ -14,6 +14,9 @@ const THEMES = {
   forest: { sky: 0xc9ead0, ground: 0x5aa45c, lot: '#59626b', line: 'rgba(255,255,255,0.8)', curb: 0xd2d8cc, hemi: [0xe6f7e8, 0x3f7a40, 1.0], sun: [0xfff4dc, 2.0], deco: ['pine', 'tree', 'pine', 'pine', 'flowers'] },
   farm: { sky: 0xd6efff, ground: 0x9bd16a, lot: '#a07e58', line: 'rgba(255,244,214,0.9)', curb: 0x8a6440, hemi: [0xf0f8ff, 0x7aa850, 1.0], sun: [0xfff0d0, 2.2], deco: ['fence', 'tree', 'barn', 'flowers', 'fence'] },
   snow: { sky: 0xdfe9f6, ground: 0xf1f5fb, lot: '#748199', line: 'rgba(255,255,255,0.9)', curb: 0xffffff, hemi: [0xeef4ff, 0xc0cde0, 0.9], sun: [0xf0f4ff, 1.9], deco: ['snowpine', 'snowpine', 'snowpile', 'snowpine', 'house'] },
+  city: { sky: 0xcfe3f5, ground: 0x9fb39a, lot: '#555c6b', line: 'rgba(255,255,255,0.85)', curb: 0xdfe3ea, hemi: [0xeef6ff, 0x7c8a78, 1.0], sun: [0xfff3e0, 2.2], deco: ['tower', 'tower', 'tree', 'tower', 'flowers'] },
+  beach: { sky: 0xbfe9ff, ground: 0xf0dca4, lot: '#5d6474', line: 'rgba(255,255,255,0.85)', curb: 0xf4efe4, hemi: [0xf2fbff, 0xc9b27a, 1.05], sun: [0xfff2d6, 2.4], deco: ['palm', 'palm', 'umbrella', 'rock', 'palm'], water: true },
+  mega: { sky: 0xd5e8f7, ground: 0x8fcf6a, lot: '#535a6a', line: 'rgba(255,255,255,0.85)', curb: 0xe6e9ef, hemi: [0xeaf6ff, 0x6fae5a, 1.0], sun: [0xfff1d6, 2.2], deco: ['tower', 'tree', 'tree', 'flowers', 'house'] },
   night: { sky: 0x10162e, ground: 0x253050, lot: '#353b56', line: 'rgba(255,215,122,0.8)', curb: 0x59628e, hemi: [0x5a6aa8, 0x101830, 0.55], sun: [0x9fb4ff, 0.7], deco: ['building', 'building', 'lamp', 'building'], night: true },
 };
 
@@ -109,7 +112,15 @@ export class Game {
 
     this._last = 0;
     this._loop = this._loop.bind(this);
-    canvas.addEventListener('pointerdown', (e) => this._onPointer(e));
+    this.pointers = new Map();
+    this.zoom = 1;
+    this.panX = 0;
+    this.panZ = 0;
+    canvas.addEventListener('pointerdown', (e) => this._down(e));
+    canvas.addEventListener('pointermove', (e) => this._move(e));
+    canvas.addEventListener('pointerup', (e) => this._up(e));
+    canvas.addEventListener('pointercancel', (e) => this._up(e, true));
+    canvas.addEventListener('wheel', (e) => this._wheel(e), { passive: false });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.resizeObs = new ResizeObserver(() => this.resize());
     this.resizeObs.observe(canvas.parentElement);
@@ -145,6 +156,11 @@ export class Game {
     this.fx.clear();
     this.shake = 0;
     this.orbit = 0;
+    this.zoom = 1;
+    this.panX = 0;
+    this.panZ = 0;
+    this.gesture = null;
+    this.pointers.clear();
     this._z = 0;
     this.blockT = 0;
     this._forceFrames = 3;
@@ -338,15 +354,29 @@ export class Game {
     let placed = 0;
     const spots = [];
     const decoRoot = new THREE.Group();
+    const seaZ = th.water ? hh + ro + ROAD_W / 2 + 2.6 : Infinity;
+    if (th.water) {
+      const sea = new THREE.Mesh(new THREE.PlaneGeometry(140, 70), new THREE.MeshStandardMaterial({ color: 0x3fb4e6, roughness: 0.25, metalness: 0.1, envMapIntensity: 0.8 }));
+      sea.rotation.x = -Math.PI / 2;
+      sea.position.set(0, 0.003, seaZ + 35);
+      layer(sea, LAYER.sidewalk);
+      this.world.add(sea);
+      const foam = new THREE.Mesh(new THREE.PlaneGeometry(140, 0.25), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 }));
+      foam.rotation.x = -Math.PI / 2;
+      foam.position.set(0, 0.004, seaZ + 0.1);
+      layer(foam, LAYER.road);
+      this.world.add(foam);
+    }
     for (let i = 0; i < 400 && placed < 70; i++) {
       const x = (rand() * 2 - 1) * R, z = (rand() * 2 - 1) * R;
       const ax = Math.abs(x), az = Math.abs(z);
       if (ax < clearX && az < clearZ) continue;
+      if (z > seaZ - 0.6) continue;
       // keep off the roads
       if (Math.abs(ax - (hw + ro)) < ROAD_W / 2 + 0.55 || Math.abs(az - (hh + ro)) < ROAD_W / 2 + 0.55) continue;
       const type = th.deco[Math.floor(rand() * th.deco.length)];
-      const big = type === 'house' || type === 'building' || type === 'barn';
-      const need = big ? 1.6 : 0.7;
+      const big = type === 'house' || type === 'building' || type === 'barn' || type === 'tower';
+      const need = big ? (type === 'tower' ? 2 : 1.6) : 0.7;
       if (big && (ax < clearX + 0.8 && az < clearZ + 0.8)) continue;
       if (spots.some(([sx, sz, sr]) => Math.hypot(sx - x, sz - z) < sr + need)) continue;
       spots.push([x, z, need]);
@@ -398,10 +428,17 @@ export class Game {
     const faces = !!this.settings.faces;
     const realistic = !!this.settings.realistic;
     this.glowTex = this.glowTex || this._glowTexture();
+    // Very big lots: lighter vehicle meshes and soft blob shadows instead of a second shadow pass.
+    const heavy = this.vehicles.length > 45;
+    setDetail(!heavy);
     for (const v of this.vehicles) {
       if (v.state === 'gone') continue;
-      const m = vehicleModel(v, { faces, realistic });
+      const m = vehicleModel(heavy ? { ...v, lite: true } : v, { faces, realistic, lite: heavy });
       m.userData.vid = v.id;
+      if (heavy) {
+        m.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+        blobShadow(0.5, m, 0.95, v.len * 0.62);
+      }
       if (th.night) {
         const beam = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.6), new THREE.MeshBasicMaterial({ map: this.glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 }));
         beam.rotation.x = -Math.PI / 2;
@@ -412,6 +449,8 @@ export class Game {
       v.mesh = m;
       this._placeVehicle(v);
     }
+
+    setDetail(true);
 
     // hint ring
     this.hintMesh = new THREE.Mesh(rbox(1, 0.02, 1, 0.009, 2), new THREE.MeshBasicMaterial({ color: 0xfff27a, transparent: true, opacity: 0.6, depthWrite: false }));
@@ -679,7 +718,76 @@ export class Game {
     void tz;
     this.camDist = cam.position.distanceTo(target);
     this.camTarget = target.clone();
+    this.camDir = cam.position.clone().sub(target).normalize();
     if (this.scene.fog) { this.scene.fog.near = this.camDist * 1.15; this.scene.fog.far = this.camDist * 2.6; }
+    // Big lots: allow zooming in until a parking space is a comfortable tap target.
+    const a = this._screen(0, 0, 0), b2 = this._screen(1, 0, 0);
+    const cellPx = Math.abs(b2[0] - a[0]);
+    this.maxZoom = this.mode === 'play' ? Math.max(1, Math.min(4, 78 / Math.max(1, cellPx))) : 1;
+    const zoomable = this.maxZoom > 1.2;
+    if (zoomable !== this.zoomable) { this.zoomable = zoomable; this.hooks.onZoomable?.(zoomable); }
+    this.zoom = Math.min(this.zoom, this.maxZoom);
+    this._applyView();
+  }
+
+  // ------------------------------------------------------------ zoom & pan ---
+
+  _applyView() {
+    if (!this.camTarget || this.mode !== 'play') return;
+    const L = this.level;
+    const z = this.zoom;
+    // keep the view over the lot: the further in, the further you can slide
+    const mx = (L.w / 2 + 0.6) * (1 - 1 / z), mz = (L.h / 2 + 0.6) * (1 - 1 / z);
+    this.panX = Math.max(-mx, Math.min(mx, this.panX));
+    this.panZ = Math.max(-mz, Math.min(mz, this.panZ));
+    const T = this.camTarget.clone().add(new THREE.Vector3(this.panX, 0, this.panZ));
+    this.camera.position.copy(T).addScaledVector(this.camDir, this.camDist / z);
+    this.camera.lookAt(T);
+    this.camera.updateMatrixWorld();
+    this._forceFrames = Math.max(this._forceFrames || 0, 2);
+  }
+
+  setZoom(z, keepPoint) {
+    if (!this.zoomable) return;
+    const nz = Math.max(1, Math.min(this.maxZoom, z));
+    if (keepPoint) {
+      // zoom towards the point under the finger / cursor
+      const before = this._groundAt(keepPoint[0], keepPoint[1]);
+      this.zoom = nz;
+      this._applyView();
+      const after = this._groundAt(keepPoint[0], keepPoint[1]);
+      if (before && after) { this.panX += before.x - after.x; this.panZ += before.z - after.z; }
+    } else this.zoom = nz;
+    this._applyView();
+  }
+
+  zoomBy(f) { this.setZoom(this.zoom * f); }
+  zoomFit() { this.zoom = 1; this.panX = 0; this.panZ = 0; this._applyView(); }
+
+  /** Centre the view on a point if it's out of (comfortable) view. */
+  lookAt(x, z) {
+    if (this.zoom <= 1.01) return;
+    const [sx, sy] = this._screen(x, 0, z);
+    const top = this.hooks.hudHeight?.() ?? 70;
+    if (sx > 40 && sx < this.cw - 40 && sy > top + 30 && sy < this.ch - 40) return;
+    this.panX = x - this.camTarget.x;
+    this.panZ = z - this.camTarget.z;
+    this._applyView();
+  }
+
+  _groundAt(px, py) {
+    const ndc = new THREE.Vector2((px / this.cw) * 2 - 1, -(py / this.ch) * 2 + 1);
+    this.ray.setFromCamera(ndc, this.camera);
+    const pt = new THREE.Vector3();
+    return this.ray.ray.intersectPlane(this.groundPlane, pt) ? pt : null;
+  }
+
+  _panBy(dx, dy) {
+    const dist = this.camDist / this.zoom;
+    const perPx = (2 * dist * Math.tan((this.camera.fov * Math.PI) / 360)) / this.ch;
+    this.panX -= dx * perPx;
+    this.panZ -= (dy * perPx) / Math.max(0.3, this.camDir.y);
+    this._applyView();
   }
 
   start() {
@@ -722,6 +830,7 @@ export class Game {
     if (this.won || this.mode !== 'play') return;
     this.hint = this.findHint();
     this.hintedAt = this.time;
+    if (this.hint) { const p = this.hint.obj.mesh.position; this.lookAt(p.x, p.z); }
   }
 
   _centerOf(v) {
@@ -774,12 +883,64 @@ export class Game {
 
   // ------------------------------------------------------------ input ---
 
-  _onPointer(e) {
+  _local(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+
+  // Small lots: tap on touch-down (instant, toddler-friendly).
+  // Big lots: a tap is a touch that lifts without moving; dragging pans, two fingers pinch-zoom.
+  _down(e) {
     e.preventDefault();
     this.hooks.onFirstInput?.();
-    if (!this.level || this.won || this.mode !== 'play') return;
-    const r = this.canvas.getBoundingClientRect();
-    this.tapAt(e.clientX - r.left, e.clientY - r.top);
+    if (!this.level || this.mode !== 'play') return;
+    const [x, y] = this._local(e);
+    if (!this.zoomable) { if (!this.won) this.tapAt(x, y); return; }
+    try { this.canvas.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    this.pointers.set(e.pointerId, { x, y });
+    if (this.pointers.size === 1) this.gesture = { moved: false, x0: x, y0: y };
+    else if (this.pointers.size === 2) {
+      const [a, b] = [...this.pointers.values()];
+      this.gesture = { moved: true, pinch: true, d0: Math.hypot(a.x - b.x, a.y - b.y), z0: this.zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    }
+  }
+
+  _move(e) {
+    const p = this.pointers.get(e.pointerId);
+    if (!p || !this.gesture) return;
+    const [x, y] = this._local(e);
+    const dx = x - p.x, dy = y - p.y;
+    p.x = x; p.y = y;
+    const g = this.gesture;
+    if (this.pointers.size >= 2 && g.pinch) {
+      const [a, b] = [...this.pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      this.setZoom(g.z0 * (d / Math.max(1, g.d0)), [mx, my]);
+      this._panBy(mx - g.mx, my - g.my);
+      g.mx = mx; g.my = my;
+      return;
+    }
+    if (!g.moved && Math.hypot(x - g.x0, y - g.y0) > 9) g.moved = true;
+    if (g.moved && this.zoom > 1.001) this._panBy(dx, dy);
+  }
+
+  _up(e, cancelled) {
+    const had = this.pointers.has(e.pointerId);
+    this.pointers.delete(e.pointerId);
+    if (!had) return;
+    const g = this.gesture;
+    if (!cancelled && g && !g.moved && this.pointers.size === 0 && !this.won) {
+      const [x, y] = this._local(e);
+      this.tapAt(x, y);
+    }
+    if (this.pointers.size === 0) this.gesture = null;
+  }
+
+  _wheel(e) {
+    if (!this.zoomable || this.mode !== 'play') return;
+    e.preventDefault();
+    this.setZoom(this.zoom * Math.exp(-e.deltaY * 0.0015), this._local(e));
   }
 
   _hit(px, py) {

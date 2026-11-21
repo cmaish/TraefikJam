@@ -264,6 +264,30 @@ function improve(p, lvl, info, rand, steps) {
 }
 
 /**
+ * Top up a lot towards its target count: try extra vehicles in empty spots and keep each one
+ * only if the lot is still solvable. Used for the big late-game lots, where the constructive
+ * pass runs out of room early.
+ */
+function fillUp(p, lvl, rand, tries) {
+  const { w, h } = lvl;
+  const barred = barrierSet(lvl);
+  for (let k = 0; k < tries && lvl.vehicles.length < p.count; k++) {
+    const grid = occupied(lvl);
+    const empties = [];
+    for (let i = 0; i < w * h; i++) if (grid[i] === -1) empties.push(i);
+    if (!empties.length) break;
+    const c = empties[Math.floor(rand() * empties.length)];
+    const len = rand() < (p.truck || 0) ? 3 : 2;
+    const dir = Math.floor(rand() * 4);
+    const v = { x: c % w, y: Math.floor(c / w), len, dir };
+    if (vehicleCells(v).some(([cx, cy]) => cx >= w || cy >= h || grid[cy * w + cx] !== -1)) continue;
+    if (exitBarred(v, barred)) continue;
+    lvl.vehicles.push(v);
+    if (!analyze(lvl).solvable) lvl.vehicles.pop();
+  }
+}
+
+/**
  * Generate a level. p = { w, h, count, truck (0..1), obstacles, pets, bias,
  * attempts, minDepth } . Returns { w, h, vehicles, obstacles, pets, depth }.
  */
@@ -277,6 +301,7 @@ export function generate(p, seed) {
     let info = analyze(lvl);
     if (!info.solvable) continue; // never happens by construction, but be safe
     if (p.improve) info = improve(p, lvl, info, rand, p.improve);
+    if (p.fill) { fillUp(p, lvl, rand, p.fill); info = analyze(lvl); }
     const score = scoreLevel(p, lvl, info);
     if (score > bestScore) {
       bestScore = score;

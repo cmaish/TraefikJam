@@ -24,6 +24,7 @@ function raw(n) {
 const BARRIER_TYPES = {
   sunny: ['hedge'], trucks: ['cones', 'booth'], forest: ['hedge', 'hedge', 'sign'], farm: ['fence', 'hedge'],
   snow: ['snowbank', 'sign', 'cones'], night: ['cones', 'booth', 'sign'],
+  city: ['cones', 'booth', 'sign', 'hedge'], beach: ['fence', 'hedge', 'sign'], mega: ['cones', 'booth', 'sign', 'hedge'],
 };
 
 /** Give each run of closed exits a look (hedge, fence, roadworks, booth with a boom gate...). */

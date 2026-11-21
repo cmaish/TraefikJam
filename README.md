@@ -22,14 +22,22 @@ to four bumps, and 1 star otherwise. The 💡 button shows a vehicle that can le
   - A road loop around every lot, which vehicles turn onto as they leave.
   - Themed scenery with houses, trees, cacti, a barn, snowy pines, a night city with
     headlights and street lamps, and falling snow.
-- **120 campaign levels in 6 worlds**, with lots growing up to 8×10 and around 30
-  vehicles, then endless **Bonus Lots**:
+- **180 campaign levels in 9 worlds**, then endless **Bonus Lots**:
   - ☀️ **Sunny Town**
   - 🚚 **Truck Stop:** long trucks.
   - 🌲 **Forest Park:** trees that never move.
   - 🐥 **Farm Friends:** animals sit in the way until you tap them.
   - ❄️ **Snowy Hills**
   - 🌙 **Night City**
+  - 🏙️ **Downtown**, 🏖️ **Seaside** and 🏟️ **Mega Lot:** big lots that grow from 9×11
+    (33 vehicles) to 15×19 (91 vehicles). Downtown has office towers; Seaside has palm
+    trees, beach umbrellas and the sea.
+- **Big lots:**
+  - On big lots, pinch or scroll to zoom and drag to look around; the + / − / fit
+    buttons do the same. A tap only counts if your finger doesn't move, so dragging never
+    taps a car.
+  - The hint pans to the car it points at.
+  - Very big lots use lighter vehicle meshes and soft shadows to stay smooth on phones.
 - **Closed exits (from about level 47):** parts of the lot's edge are blocked by hedges,
   fences, roadworks cones, no-entry signs, parking booths with boom gates or snowbanks.
   Red-and-white hatching marks each closed exit, and a car facing one can't leave that way.
